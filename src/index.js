@@ -3,8 +3,9 @@ const cors = require('cors');
 const db = require('./db');
 require('dotenv').config();
 
-//importamos las rutas jejejej
+// importamos las rutas
 const categoryRoutes = require('./routes/categoryRoutes');
+const authRoutes = require('./routes/authRoutes'); 
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.get('/api/health', async (req, res) => {
 
 // Usamos las rutas
 app.use('/api/categories', categoryRoutes);
+app.use('/api/auth', authRoutes); 
 
 const PORT = process.env.PORT || 3000;
 
