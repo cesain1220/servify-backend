@@ -1,4 +1,5 @@
 const db = require('../db'); // Subimos un nivel para encontrar db.js
+const { enviarCodigoRecuperacion } = require('../services/emailService');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -105,5 +106,111 @@ exports.iniciarSesion = async (req, res) => {
     } catch (error) {
         console.error('Error al iniciar sesión:', error);
         return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+    }
+};
+
+// Solicitar código de recuperación de contraseña
+exports.solicitarRecuperacion = async (req, res) => {
+    try {
+        const { correo } = req.body;
+
+        if (!correo) {
+            return res.status(400).json({ mensaje: "El correo es obligatorio." });
+        }
+
+        // verifica que el usuario exista
+        const [usuarios] = await db.query(
+            "SELECT id FROM usuarios WHERE correo = ?",
+            [correo]
+        );
+
+        if (usuarios.length === 0) {
+            return res.status(404).json({ mensaje: "No existe una cuenta registrada con ese correo." });
+        }
+
+        //acá general un codigo aleatorio de 6 numeros
+        const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // se define la experitacion, que son de 15 minutos desde que se manda
+        const fechaExpiracion = new Date(Date.now() + 15 * 60 * 1000);
+
+        // va a guardar temporalmente el codigo y el tiempo en las columnas de la tabla usuario
+        await db.query(
+            "UPDATE usuarios SET codigo_recuperacion = ?, codigo_expiracion = ? WHERE correo = ?",
+            [codigo, fechaExpiracion, correo]
+        );
+
+        // envia el correo con brevo
+        await enviarCodigoRecuperacion(correo, codigo);
+
+        return res.status(200).json({
+            mensaje: "Código de recuperación enviado con éxito a tu correo."
+        });
+
+    } catch (error) {
+        console.error("Error al solicitar recuperación:", error);
+        return res.status(500).json({
+            mensaje: "Ocurrió un error al enviar el código de recuperación."
+        });
+    }
+};
+
+// Restablecer contraseña con el código recibido
+exports.restablecerPassword = async (req, res) => {
+    try {
+        const { correo, codigo, nuevaPassword } = req.body;
+
+        if (!correo || !codigo || !nuevaPassword) {
+            return res.status(400).json({
+                mensaje: "El correo, el código y la nueva contraseña son obligatorios."
+            });
+        }
+
+        // primero busca al usuario con sus datos de recuperacion
+        const [usuarios] = await db.query(
+            "SELECT id, codigo_recuperacion, codigo_expiracion FROM usuarios WHERE correo = ?",
+            [correo]
+        );
+
+        if (usuarios.length === 0) {
+            return res.status(404).json({ mensaje: "Usuario no encontrado." });
+        }
+
+        const usuario = usuarios[0];
+
+        // aqui busca si hay un codigo guardado y si es correcto
+        if (!usuario.codigo_recuperacion || usuario.codigo_recuperacion !== codigo.trim()) {
+            return res.status(400).json({ mensaje: "El código ingresado es incorrecto." });
+        }
+
+        // esto es para veficiar el tiempo
+        const ahora = new Date();
+        if (new Date(usuario.codigo_expiracion) < ahora) {
+            return res.status(400).json({
+                mensaje: "El código ha expirado. Por favor, solicita uno nuevo."
+            });
+        }
+
+        // encripta la contra
+        const salt = await bcrypt.genSalt(10);
+        const passwordEncriptada = await bcrypt.hash(nuevaPassword, salt);
+
+        // actualiza la contraseña y reestablece el codigo y experacion a vacio
+        await db.query(
+            `UPDATE usuarios 
+             SET password = ?, codigo_recuperacion = NULL, codigo_expiracion = NULL 
+             WHERE id = ?`,
+            [passwordEncriptada, usuario.id]
+        );
+
+        return res.status(200).json({
+            mensaje: "Contraseña actualizada exitosamente. Ya puedes iniciar sesión."
+        });
+
+    } catch (error) {
+        console.error("Error al restablecer contraseña:", error);
+        return res.status(500).json({
+            mensaje: "Ocurrió un error al intentar cambiar la contraseña."
+        });
     }
 };
