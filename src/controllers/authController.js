@@ -72,7 +72,7 @@ exports.iniciarSesion = async (req, res) => {
     }
 
     try {
-        // busca usuario porjcorreo
+        // Busca usuario por correo
         const [usuarios] = await db.query('SELECT * FROM usuarios WHERE correo = ?', [correo]);
         if (usuarios.length === 0) {
             return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
@@ -80,20 +80,20 @@ exports.iniciarSesion = async (req, res) => {
 
         const usuario = usuarios[0];
 
-        // va a comparar contraseña con el hash de la base de datos
+        // Comparar contraseña con el hash de la base de datos
         const passwordValida = await bcrypt.compare(password, usuario.password);
         if (!passwordValida) {
             return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
         }
 
-        // genera token JWT
+        // Genera token JWT
         const token = jwt.sign(
             { id: usuario.id, correo: usuario.correo, rol: usuario.rol },
             process.env.JWT_SECRET || 'clave_secreta_servify',
             { expiresIn: '30d' }
         );
 
-        // limpia password antes de responder
+        // Limpia password antes de responder
         delete usuario.password;
 
         return res.status(200).json({
@@ -109,7 +109,7 @@ exports.iniciarSesion = async (req, res) => {
     }
 };
 
-// Solicitar código de recuperación de contraseña
+// Solicitar código de recuperación de contraseña 
 exports.solicitarRecuperacion = async (req, res) => {
     try {
         const { correo } = req.body;
@@ -118,30 +118,27 @@ exports.solicitarRecuperacion = async (req, res) => {
             return res.status(400).json({ mensaje: "El correo es obligatorio." });
         }
 
-        // verifica que el usuario exista
+        // Verifica que el usuario exista
         const [usuarios] = await db.query(
             "SELECT id FROM usuarios WHERE correo = ?",
-            [correo]
+            [correo.trim()]
         );
 
         if (usuarios.length === 0) {
             return res.status(404).json({ mensaje: "No existe una cuenta registrada con ese correo." });
         }
 
-        //acá general un codigo aleatorio de 6 numeros
+        // Generar código aleatorio de 6 dígitos
         const codigo = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // se define la experitacion, que son de 15 minutos desde que se manda
-        const fechaExpiracion = new Date(Date.now() + 15 * 60 * 1000);
-
-        // va a guardar temporalmente el codigo y el tiempo en las columnas de la tabla usuario
+        // Guarda el código en la base de datos y deja codigo_expiracion en NULL
         await db.query(
-            "UPDATE usuarios SET codigo_recuperacion = ?, codigo_expiracion = ? WHERE correo = ?",
-            [codigo, fechaExpiracion, correo]
+            "UPDATE usuarios SET codigo_recuperacion = ?, codigo_expiracion = NULL WHERE correo = ?",
+            [codigo, correo.trim()]
         );
 
-        // envia el correo con brevo
-        await enviarCodigoRecuperacion(correo, codigo);
+        // Envía el correo con Brevo
+        await enviarCodigoRecuperacion(correo.trim(), codigo);
 
         return res.status(200).json({
             mensaje: "Código de recuperación enviado con éxito a tu correo."
@@ -152,6 +149,39 @@ exports.solicitarRecuperacion = async (req, res) => {
         return res.status(500).json({
             mensaje: "Ocurrió un error al enviar el código de recuperación."
         });
+    }
+};
+
+// Validar código OTP antes de avanzar al paso de contraseñas
+exports.verificarCodigoOtp = async (req, res) => {
+    try {
+        const { correo, codigo } = req.body;
+
+        if (!correo || !codigo) {
+            return res.status(400).json({ mensaje: "El correo y el código son obligatorios." });
+        }
+
+        const [usuarios] = await db.query(
+            "SELECT id, codigo_recuperacion FROM usuarios WHERE correo = ?",
+            [correo.trim()]
+        );
+
+        if (usuarios.length === 0) {
+            return res.status(404).json({ mensaje: "Usuario no encontrado." });
+        }
+
+        const usuario = usuarios[0];
+
+        // Validar únicamente si el código coincide
+        if (!usuario.codigo_recuperacion || usuario.codigo_recuperacion !== codigo.trim()) {
+            return res.status(400).json({ mensaje: "El código ingresado es incorrecto." });
+        }
+
+        return res.status(200).json({ mensaje: "Código verificado exitosamente." });
+
+    } catch (error) {
+        console.error("Error al verificar código OTP:", error);
+        return res.status(500).json({ mensaje: "Error interno al verificar el código." });
     }
 };
 
@@ -166,10 +196,10 @@ exports.restablecerPassword = async (req, res) => {
             });
         }
 
-        // primero busca al usuario con sus datos de recuperacion
+        // Buscar usuario por correo
         const [usuarios] = await db.query(
-            "SELECT id, codigo_recuperacion, codigo_expiracion FROM usuarios WHERE correo = ?",
-            [correo]
+            "SELECT id, codigo_recuperacion FROM usuarios WHERE correo = ?",
+            [correo.trim()]
         );
 
         if (usuarios.length === 0) {
@@ -178,24 +208,16 @@ exports.restablecerPassword = async (req, res) => {
 
         const usuario = usuarios[0];
 
-        // aqui busca si hay un codigo guardado y si es correcto
+        // Verificar código
         if (!usuario.codigo_recuperacion || usuario.codigo_recuperacion !== codigo.trim()) {
             return res.status(400).json({ mensaje: "El código ingresado es incorrecto." });
         }
 
-        // esto es para veficiar el tiempo
-        const ahora = new Date();
-        if (new Date(usuario.codigo_expiracion) < ahora) {
-            return res.status(400).json({
-                mensaje: "El código ha expirado. Por favor, solicita uno nuevo."
-            });
-        }
-
-        // encripta la contra
+        // Encriptar nueva contraseña
         const salt = await bcrypt.genSalt(10);
         const passwordEncriptada = await bcrypt.hash(nuevaPassword, salt);
 
-        // actualiza la contraseña y reestablece el codigo y experacion a vacio
+        // Actualizar contraseña y limpiar el código
         await db.query(
             `UPDATE usuarios 
              SET password = ?, codigo_recuperacion = NULL, codigo_expiracion = NULL 

@@ -17,4 +17,6 @@ router.post('/solicitar-recuperacion', authController.solicitarRecuperacion)
 
 router.post('/cambiar-password', authController.restablecerPassword)
 
+router.post('/verificar-codigo', authController.verificarCodigoOtp);
+
 module.exports = router;

@@ -1,3 +1,4 @@
+
 const { BrevoClient } = require('@getbrevo/brevo');
 
 // se configura el brevo con la api qeu esta en el .env
