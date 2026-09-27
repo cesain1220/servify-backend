@@ -6,6 +6,7 @@ require('dotenv').config();
 // importamos las rutas
 const categoryRoutes = require('./routes/categoryRoutes');
 const authRoutes = require('./routes/authRoutes'); 
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 
@@ -30,7 +31,8 @@ app.get('/api/health', async (req, res) => {
 
 // Usamos las rutas
 app.use('/api/categories', categoryRoutes);
-app.use('/api/auth', authRoutes); 
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 
 const PORT = process.env.PORT || 3000;
 
