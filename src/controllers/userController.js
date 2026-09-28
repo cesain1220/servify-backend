@@ -41,3 +41,23 @@ exports.actualizarPerfil = async (req, res) => {
         return res.status(500).json({ mensaje: 'Error interno al guardar los cambios' });
     }
 };
+
+
+//esta parte de abajo ees para cuando un cliente ve el perfil   de un trabajador y lo puede contratar
+
+
+// Obtener perfil del profesional / usuario por ID
+exports.getUserProfile = async (req, res) => {
+    // Datos directos para probar que la pantalla y la conexión funcionen
+    res.json({
+        id: 1,
+        nombreCompleto: "Carlos Mendoza",
+        oficio: "Electricista Certificado",
+        anosExperiencia: 5,
+        calificacionPromedio: 4.8,
+        totalResenas: 12,
+        biografia: "Especialista en instalaciones residenciales y comerciales. Reparación de cortocircuitos y mantenimiento general.",
+        tarifaHora: 15.0
+    });
+};
+
