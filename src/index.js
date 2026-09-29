@@ -1,41 +1,41 @@
-const express = require('express');
-const cors = require('cors');
-const db = require('./db');
-require('dotenv').config();
+    const express = require('express');
+    const cors = require('cors');
+    const db = require('./db');
+    require('dotenv').config();
 
-// importamos las rutas
-const categoryRoutes = require('./routes/categoryRoutes');
-const authRoutes = require('./routes/authRoutes'); 
-const userRoutes = require('./routes/userRoutes');
+    // importamos las rutas
+    const categoryRoutes = require('./routes/categoryRoutes');
+    const authRoutes = require('./routes/authRoutes'); 
+    const userRoutes = require('./routes/userRoutes');
 
-const app = express();
+    const app = express();
 
-// Middlewares
-app.use(cors());
-app.use(express.json());
+    // Middlewares
+    app.use(cors());
+    app.use(express.json());
 
-// Endpoint de prueba de salud / conexión
-app.get('/api/health', async (req, res) => {
-  try {
-    const [rows] = await db.query('SELECT 1 + 1 AS resultado');
-    res.json({ 
-      status: 'OK', 
-      mensaje: 'Servidor y conexión a Aiven MySQL funcionando correctamente', 
-      test: rows[0].resultado 
+    // Endpoint de prueba de salud / conexión
+    app.get('/api/health', async (req, res) => {
+      try {
+        const [rows] = await db.query('SELECT 1 + 1 AS resultado');
+        res.json({ 
+          status: 'OK', 
+          mensaje: 'Servidor y conexión a Aiven MySQL funcionando correctamente', 
+          test: rows[0].resultado 
+        });
+      } catch (error) {
+        console.error('Error al conectar a la base de datos:', error);
+        res.status(500).json({ status: 'ERROR', error: error.message });
+      }
     });
-  } catch (error) {
-    console.error('Error al conectar a la base de datos:', error);
-    res.status(500).json({ status: 'ERROR', error: error.message });
-  }
-});
 
-// Usamos las rutas
-app.use('/api/categories', categoryRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
+    // Usamos las rutas
+    app.use('/api/categories', categoryRoutes);
+    app.use('/api/auth', authRoutes);
+    app.use('/api/users', userRoutes);
 
-const PORT = process.env.PORT || 3000;
+    const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor ejecutándose en http://192.168.18.7:${PORT}`);
-});
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 Servidor ejecutándose en http://192.168.18.7:${PORT}`);
+    });

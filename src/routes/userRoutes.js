@@ -8,7 +8,7 @@ router.put('/perfil', verificarToken, userController.actualizarPerfil);
 
 // ruta para la lista de profesionales
 router.get('/profesionales', userController.getProfesionales);
-
+ 
 // ruta para el detalle individual
 router.get('/:id', userController.getUserProfile);
 //ruta para cambiar estado de vip

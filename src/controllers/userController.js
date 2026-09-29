@@ -134,5 +134,5 @@ exports.cambiarEstadoVip = async (req, res) => {
     } catch (error) {
         console.error('Error al actualizar estado VIP:', error);
         return res.status(500).json({ mensaje: 'Error interno del servidor' });
-    }
+    } 
 };
