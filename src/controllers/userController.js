@@ -43,22 +43,52 @@ exports.actualizarPerfil = async (req, res) => {
 };
 
 
-//esta parte de abajo ees para cuando un cliente ve el perfil   de un trabajador y lo puede contratar
+// OBTENER TODOS LOS PROFESIONALES/TÉCNICOS PARA EL HOME
+exports.getProfesionales = async (req, res) => {
+    try {
+        // Filtramos para traer solo a los usuarios que sean técnicos/profesionales
+        const [rows] = await db.query(
+            `SELECT 
+                id,
+                nombre AS nombreCompleto,
+                calificacion_promedio AS calificacionPromedio,
+                rol
+            FROM usuarios 
+            WHERE rol = 'tecnico' OR rol = 'profesional'`
+        );
 
+        // Mapeamos al formato exacto que espera ProfesionalPerfil en Android
+        const profesionales = rows.map(usuario => ({
+            id: Number(usuario.id),
+            nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
+            oficio: 'Técnico Especialista',
+            anosExperiencia: 3,
+            calificacionPromedio: Number(usuario.calificacionPromedio || 5.0),
+            totalResenas: 0,
+            biografia: 'Profesional registrado en la plataforma listo para atender servicios.',
+            tarifaHora: 15.0
+        }));
 
+        return res.status(200).json(profesionales);
+    } catch (error) {
+        console.error('Error al listar profesionales:', error);
+        return res.status(500).json({ mensaje: 'Error al obtener profesionales', error: error.message });
+    }
+};
+
+// OBTENER EL PERFIL INDIVIDUAL (DetalleTecnico)
 exports.getUserProfile = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Consultamos la tabla usuarios
         const [rows] = await db.query(
             `SELECT 
-        id,
-        nombre AS nombreCompleto,
-        calificacion_promedio AS calificacionPromedio,
-        rol
-       FROM usuarios 
-       WHERE id = ?`,
+                id,
+                nombre AS nombreCompleto,
+                calificacion_promedio AS calificacionPromedio,
+                rol
+            FROM usuarios 
+            WHERE id = ?`,
             [id]
         );
 
@@ -68,12 +98,11 @@ exports.getUserProfile = async (req, res) => {
 
         const usuario = rows[0];
 
-        // Devolvemos el formato exacto que espera Android
         res.json({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
-            oficio: usuario.rol === 'trabajador' ? 'Técnico Especialista' : 'Profesional',
-            anosExperiencia: 3, // Puedes ajustar este valor si tienes otra tabla o columna
+            oficio: 'Profesional', // Corregido: texto en vez de booleano
+            anosExperiencia: 3,
             calificacionPromedio: Number(usuario.calificacionPromedio || 5.0),
             totalResenas: 0,
             biografia: 'Profesional registrado en la plataforma listo para atender servicios.',
@@ -84,4 +113,3 @@ exports.getUserProfile = async (req, res) => {
         res.status(500).json({ mensaje: 'Error interno del servidor', error: error.message });
     }
 };
-
