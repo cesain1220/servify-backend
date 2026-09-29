@@ -11,5 +11,7 @@ router.get('/profesionales', userController.getProfesionales);
 
 // ruta para el detalle individual
 router.get('/:id', userController.getUserProfile);
+//ruta para cambiar estado de vip
+router.put('/:id/vip', userController.cambiarEstadoVip);
 
 module.exports = router;

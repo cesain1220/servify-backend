@@ -5,7 +5,9 @@ exports.obtenerPerfil = async (req, res) => {
     try {
         const usuarioId = req.usuario.id;
         const [rows] = await db.query(
-            'SELECT id, nombre, correo, telefono, direccion_texto, foto_url, rol FROM usuarios WHERE id = ?',
+            `SELECT id, nombre, correo, telefono, foto_url, rol, direccion_texto, 
+            es_vip, calificacion_promedio, biografia, anos_experiencia 
+             FROM usuarios WHERE id = ?`,
             [usuarioId]
         );
 
@@ -43,30 +45,29 @@ exports.actualizarPerfil = async (req, res) => {
 };
 
 
-// OBTENER TODOS LOS PROFESIONALES/TÉCNICOS PARA EL HOME
+// OBTENER TODOS LOS PROFESIONALES
 exports.getProfesionales = async (req, res) => {
     try {
-        // Filtramos para traer solo a los usuarios que sean técnicos/profesionales
         const [rows] = await db.query(
             `SELECT 
                 id,
                 nombre AS nombreCompleto,
                 calificacion_promedio AS calificacionPromedio,
+                COALESCE(biografia, 'Sin descripción disponible.') AS biografia,
+                COALESCE(anos_experiencia, 0) AS anosExperiencia,
                 rol
             FROM usuarios 
             WHERE rol = 'tecnico' OR rol = 'profesional'`
         );
 
-        // Mapeamos al formato exacto que espera ProfesionalPerfil en Android
         const profesionales = rows.map(usuario => ({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
             oficio: 'Técnico Especialista',
-            anosExperiencia: 3,
+            anosExperiencia: Number(usuario.anosExperiencia),
             calificacionPromedio: Number(usuario.calificacionPromedio || 5.0),
             totalResenas: 0,
-            biografia: 'Profesional registrado en la plataforma listo para atender servicios.',
-            tarifaHora: 15.0
+            biografia: usuario.biografia
         }));
 
         return res.status(200).json(profesionales);
@@ -76,7 +77,7 @@ exports.getProfesionales = async (req, res) => {
     }
 };
 
-// OBTENER EL PERFIL INDIVIDUAL (DetalleTecnico)
+// OBTENER DETALLE INDIVIDUAL
 exports.getUserProfile = async (req, res) => {
     try {
         const { id } = req.params;
@@ -86,6 +87,8 @@ exports.getUserProfile = async (req, res) => {
                 id,
                 nombre AS nombreCompleto,
                 calificacion_promedio AS calificacionPromedio,
+                COALESCE(biografia, 'Sin descripción disponible.') AS biografia,
+                COALESCE(anos_experiencia, 0) AS anosExperiencia,
                 rol
             FROM usuarios 
             WHERE id = ?`,
@@ -101,15 +104,35 @@ exports.getUserProfile = async (req, res) => {
         res.json({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
-            oficio: 'Profesional', // Corregido: texto en vez de booleano
-            anosExperiencia: 3,
+            oficio: 'Técnico Especialista',
+            anosExperiencia: Number(usuario.anosExperiencia),
             calificacionPromedio: Number(usuario.calificacionPromedio || 5.0),
             totalResenas: 0,
-            biografia: 'Profesional registrado en la plataforma listo para atender servicios.',
-            tarifaHora: 15.0
+            biografia: usuario.biografia
         });
     } catch (error) {
         console.error('Error al obtener perfil:', error);
         res.status(500).json({ mensaje: 'Error interno del servidor', error: error.message });
+    }
+};
+
+//funcion para cambiar el estado de membresia
+exports.cambiarEstadoVip = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { es_vip } = req.body; // true o false
+
+        await db.query(
+            'UPDATE usuarios SET es_vip = ? WHERE id = ?',
+            [es_vip ? 1 : 0, id]
+        );
+
+        return res.status(200).json({
+            mensaje: es_vip ? 'Plan PRO activado' : 'Plan PRO cancelado',
+            es_vip: Boolean(es_vip)
+        });
+    } catch (error) {
+        console.error('Error al actualizar estado VIP:', error);
+        return res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 };
