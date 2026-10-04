@@ -44,33 +44,29 @@ exports.actualizarPerfil = async (req, res) => {
     }
 };
 
-// OBTENER TODOS LOS PROFESIONALES (CON COORDENADAS)
+// OBTENER TODOS LOS PROFESIONALES (CONSULTA DIRECTA A LA TABLA USUARIOS)
 exports.getProfesionales = async (req, res) => {
     try {
         const [rows] = await db.query(
             `SELECT 
-                u.id,
-                u.nombre AS nombreCompleto,
-                COALESCE(c.nombre, 'Técnico Especialista') AS oficio,
-                u.calificacion_promedio AS calificacionPromedio,
-                COALESCE(u.biografia, 'Sin descripción disponible.') AS biografia,
-                COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
-                u.latitud,
-                u.longitud,
-                u.rol
-            FROM usuarios u
-            LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
-            LEFT JOIN categorias c ON tc.categoria_id = c.id
-            WHERE u.rol = 'tecnico' OR u.rol = 'profesional' OR u.rol = 'ambos'
-            GROUP BY u.id`
+                id,
+                nombre AS nombreCompleto,
+                COALESCE(biografia, 'Sin descripción disponible.') AS biografia,
+                COALESCE(anos_experiencia, 0) AS anosExperiencia,
+                COALESCE(calificacion_promedio, 5.0) AS calificacionPromedio,
+                latitud,
+                longitud,
+                rol
+             FROM usuarios 
+             WHERE LOWER(rol) IN ('tecnico', 'profesional', 'ambos')`
         );
 
         const profesionales = rows.map(usuario => ({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
-            oficio: usuario.oficio,
+            oficio: 'Técnico Especialista',
             anosExperiencia: Number(usuario.anosExperiencia),
-            calificacionPromedio: Number(usuario.calificacionPromedio || 5.0),
+            calificacionPromedio: Number(usuario.calificacionPromedio),
             totalResenas: 0,
             biografia: usuario.biografia,
             latitud: usuario.latitud !== null ? Number(usuario.latitud) : null,
@@ -84,27 +80,23 @@ exports.getProfesionales = async (req, res) => {
     }
 };
 
-// OBTENER DETALLE INDIVIDUAL (CON COORDENADAS)
+// OBTENER DETALLE INDIVIDUAL
 exports.getUserProfile = async (req, res) => {
     try {
         const { id } = req.params;
 
         const [rows] = await db.query(
             `SELECT 
-                u.id,
-                u.nombre AS nombreCompleto,
-                COALESCE(c.nombre, 'Técnico Especialista') AS oficio,
-                u.calificacion_promedio AS calificacionPromedio,
-                COALESCE(u.biografia, 'Sin descripción disponible.') AS biografia,
-                COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
-                u.latitud,
-                u.longitud,
-                u.rol
-            FROM usuarios u
-            LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
-            LEFT JOIN categorias c ON tc.categoria_id = c.id
-            WHERE u.id = ?
-            GROUP BY u.id`,
+                id,
+                nombre AS nombreCompleto,
+                COALESCE(biografia, 'Sin descripción disponible.') AS biografia,
+                COALESCE(anos_experiencia, 0) AS anosExperiencia,
+                COALESCE(calificacion_promedio, 5.0) AS calificacionPromedio,
+                latitud,
+                longitud,
+                rol
+             FROM usuarios 
+             WHERE id = ?`,
             [id]
         );
 
@@ -114,12 +106,12 @@ exports.getUserProfile = async (req, res) => {
 
         const usuario = rows[0];
 
-        res.json({
+        return res.json({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
-            oficio: usuario.oficio,
+            oficio: 'Técnico Especialista',
             anosExperiencia: Number(usuario.anosExperiencia),
-            calificacionPromedio: Number(usuario.calificacionPromedio || 5.0),
+            calificacionPromedio: Number(usuario.calificacionPromedio),
             totalResenas: 0,
             biografia: usuario.biografia,
             latitud: usuario.latitud !== null ? Number(usuario.latitud) : null,
@@ -127,7 +119,7 @@ exports.getUserProfile = async (req, res) => {
         });
     } catch (error) {
         console.error('Error al obtener perfil:', error);
-        res.status(500).json({ mensaje: 'Error interno del servidor', error: error.message });
+        return res.status(500).json({ mensaje: 'Error interno del servidor', error: error.message });
     }
 };
 
