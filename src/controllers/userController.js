@@ -6,7 +6,7 @@ exports.obtenerPerfil = async (req, res) => {
         const usuarioId = req.usuario.id;
         const [rows] = await db.query(
             `SELECT id, nombre, correo, telefono, foto_url, rol, direccion_texto, 
-            es_vip, calificacion_promedio, biografia, anos_experiencia 
+                    latitud, longitud, es_vip, calificacion_promedio, biografia, anos_experiencia 
              FROM usuarios WHERE id = ?`,
             [usuarioId]
         );
@@ -44,30 +44,37 @@ exports.actualizarPerfil = async (req, res) => {
     }
 };
 
-
-// OBTENER TODOS LOS PROFESIONALES
+// OBTENER TODOS LOS PROFESIONALES (CON COORDENADAS)
 exports.getProfesionales = async (req, res) => {
     try {
         const [rows] = await db.query(
             `SELECT 
-                id,
-                nombre AS nombreCompleto,
-                calificacion_promedio AS calificacionPromedio,
-                COALESCE(biografia, 'Sin descripción disponible.') AS biografia,
-                COALESCE(anos_experiencia, 0) AS anosExperiencia,
-                rol
-            FROM usuarios 
-            WHERE rol = 'tecnico' OR rol = 'profesional'`
+                u.id,
+                u.nombre AS nombreCompleto,
+                COALESCE(c.nombre, 'TÃ©cnico Especialista') AS oficio,
+                u.calificacion_promedio AS calificacionPromedio,
+                COALESCE(u.biografia, 'Sin descripciÃ³n disponible.') AS biografia,
+                COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
+                u.latitud,
+                u.longitud,
+                u.rol
+            FROM usuarios u
+            LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
+            LEFT JOIN categorias c ON tc.categoria_id = c.id
+            WHERE u.rol = 'tecnico' OR u.rol = 'profesional' OR u.rol = 'ambos'
+            GROUP BY u.id`
         );
 
         const profesionales = rows.map(usuario => ({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
-            oficio: 'Técnico Especialista',
+            oficio: usuario.oficio,
             anosExperiencia: Number(usuario.anosExperiencia),
             calificacionPromedio: Number(usuario.calificacionPromedio || 5.0),
             totalResenas: 0,
-            biografia: usuario.biografia
+            biografia: usuario.biografia,
+            latitud: usuario.latitud !== null ? Number(usuario.latitud) : null,
+            longitud: usuario.longitud !== null ? Number(usuario.longitud) : null
         }));
 
         return res.status(200).json(profesionales);
@@ -77,21 +84,27 @@ exports.getProfesionales = async (req, res) => {
     }
 };
 
-// OBTENER DETALLE INDIVIDUAL
+// OBTENER DETALLE INDIVIDUAL (CON COORDENADAS)
 exports.getUserProfile = async (req, res) => {
     try {
         const { id } = req.params;
 
         const [rows] = await db.query(
             `SELECT 
-                id,
-                nombre AS nombreCompleto,
-                calificacion_promedio AS calificacionPromedio,
-                COALESCE(biografia, 'Sin descripción disponible.') AS biografia,
-                COALESCE(anos_experiencia, 0) AS anosExperiencia,
-                rol
-            FROM usuarios 
-            WHERE id = ?`,
+                u.id,
+                u.nombre AS nombreCompleto,
+                COALESCE(c.nombre, 'TÃ©cnico Especialista') AS oficio,
+                u.calificacion_promedio AS calificacionPromedio,
+                COALESCE(u.biografia, 'Sin descripciÃ³n disponible.') AS biografia,
+                COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
+                u.latitud,
+                u.longitud,
+                u.rol
+            FROM usuarios u
+            LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
+            LEFT JOIN categorias c ON tc.categoria_id = c.id
+            WHERE u.id = ?
+            GROUP BY u.id`,
             [id]
         );
 
@@ -104,11 +117,13 @@ exports.getUserProfile = async (req, res) => {
         res.json({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
-            oficio: 'Técnico Especialista',
+            oficio: usuario.oficio,
             anosExperiencia: Number(usuario.anosExperiencia),
             calificacionPromedio: Number(usuario.calificacionPromedio || 5.0),
             totalResenas: 0,
-            biografia: usuario.biografia
+            biografia: usuario.biografia,
+            latitud: usuario.latitud !== null ? Number(usuario.latitud) : null,
+            longitud: usuario.longitud !== null ? Number(usuario.longitud) : null
         });
     } catch (error) {
         console.error('Error al obtener perfil:', error);
@@ -116,11 +131,11 @@ exports.getUserProfile = async (req, res) => {
     }
 };
 
-//funcion para cambiar el estado de membresia
+// Cambiar estado VIP
 exports.cambiarEstadoVip = async (req, res) => {
     try {
         const { id } = req.params;
-        const { es_vip } = req.body; // true o false
+        const { es_vip } = req.body;
 
         await db.query(
             'UPDATE usuarios SET es_vip = ? WHERE id = ?',

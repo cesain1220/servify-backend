@@ -14,4 +14,5 @@ router.get('/:id', userController.getUserProfile);
 //ruta para cambiar estado de vip
 router.put('/:id/vip', userController.cambiarEstadoVip);
 
+
 module.exports = router;
