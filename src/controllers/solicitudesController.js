@@ -4,7 +4,7 @@ exports.crearSolicitud = async (req, res) => {
     try {
         const cliente_id = req.usuario.id;
         //se recibe la solitud con los datos
-        const { categoria_id, titulo, descripcion, presupuesto_estimado } = req.body;
+        const { categoria_id, titulo, descripcion, presupuesto } = req.body;
 
         if (!titulo || !descripcion || !categoria_id) {
             return res.status(400).json({ mensaje: 'Faltan datos obligatorios' });
@@ -15,7 +15,7 @@ exports.crearSolicitud = async (req, res) => {
             `INSERT INTO solicitudes 
             (cliente_id, categoria_id, titulo, descripcion, presupuesto_estimado, estado) 
             VALUES (?, ?, ?, ?, ?, 'PENDIENTE')`,
-            [cliente_id, categoria_id, titulo, descripcion, presupuesto_estimado || null]
+            [cliente_id, categoria_id, titulo, descripcion, presupuesto || null]
         );
 
         return res.status(200).json({ mensaje: 'Solicitud creada con éxito' });
