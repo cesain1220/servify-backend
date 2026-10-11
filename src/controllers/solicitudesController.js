@@ -13,9 +13,18 @@ const crearSolicitud = async (req, res) => {
 
         await db.query(
             `INSERT INTO solicitudes 
-            (cliente_id, categoria_id, titulo, descripcion, presupuesto_estimado, estado) 
-            VALUES (?, ?, ?, ?, ?, 'PENDIENTE')`,
-            [cliente_id, categoria_id, titulo, descripcion, presupuesto || null]
+            (cliente_id, categoria_id, titulo, descripcion, presupuesto_estimado, latitud, longitud, direccion_texto, estado) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDIENTE')`,
+            [
+                cliente_id,
+                categoria_id,
+                titulo,
+                descripcion,
+                presupuesto || null,
+                latitud ?? 0,
+                longitud ?? 0,
+                direccion_texto || ''
+            ]
         );
 
         return res.status(200).json({ mensaje: 'Solicitud creada con éxito' });
