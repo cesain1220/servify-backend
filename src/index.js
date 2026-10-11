@@ -4,10 +4,13 @@
     require('dotenv').config();
 
     // importamos las rutas
+    const postulacionesRoutes = require('./routes/postulacionesRoutes');
     const categoryRoutes = require('./routes/categoryRoutes');
     const authRoutes = require('./routes/authRoutes'); 
     const userRoutes = require('./routes/userRoutes');
     const solicitudesRoutes = require('./routes/solicitudesRoutes');
+
+
 
     const app = express();
 
@@ -31,6 +34,7 @@
     });
 
     // Usamos las rutas
+    app.use('/api/postulaciones', postulacionesRoutes);
     app.use('/api/categories', categoryRoutes);
     app.use('/api/auth', authRoutes);
     app.use('/api/users', userRoutes);
