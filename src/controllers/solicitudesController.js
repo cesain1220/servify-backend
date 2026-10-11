@@ -3,7 +3,7 @@ const db = require('../db');
 const crearSolicitud = async (req, res) => {
     try {
         const cliente_id = req.usuario.id;
-        const { categoria_id, titulo, descripcion, presupuesto } = req.body;
+        const { categoria_id, titulo, descripcion, presupuesto, latitud, longitud, direccion_texto } = req.body;
 
         console.log('DEBUG:', { cliente_id, categoria_id, titulo, descripcion, presupuesto, usuario: req.usuario });
 
