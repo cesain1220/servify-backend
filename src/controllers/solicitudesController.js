@@ -10,6 +10,7 @@ const crearSolicitud = async (req, res) => {
         }
 
         await db.query(
+            console.log('DEBUG:', { cliente_id, categoria_id, titulo, descripcion, presupuesto, usuario: req.usuario });
             `INSERT INTO solicitudes 
             (cliente_id, categoria_id, titulo, descripcion, presupuesto_estimado, estado) 
             VALUES (?, ?, ?, ?, ?, 'PENDIENTE')`,
@@ -17,9 +18,13 @@ const crearSolicitud = async (req, res) => {
         );
 
         return res.status(200).json({ mensaje: 'Solicitud creada con éxito' });
-    } catch (error) {
-        console.error('Error al crear solicitud:', error);
-        return res.status(500).json({ mensaje: 'Error interno al crear solicitud' });
+    } } catch (error) {
+        console.error('Error al crear solicitud:',
+            error); return res.status(500).json({
+                mensaje: 'Error interno al crear solicitud',
+                detalle: error.sqlMessage || error.message,
+                codigo: error.code
+            });
     }
 };
 
