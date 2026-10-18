@@ -12,6 +12,7 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const solicitudesRoutes = require('./routes/solicitudesRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const adminRoutes = require('./routes/adminRoutes'); // <-- Importado aquí arriba
 const registrarChatSocket = require('./chatSocket');
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/solicitudes', solicitudesRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/admin', adminRoutes); // <-- Registrado aquí antes del servidor
 
 // Servidor HTTP + Socket.IO
 const server = http.createServer(app);
