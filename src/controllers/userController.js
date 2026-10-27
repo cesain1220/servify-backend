@@ -47,15 +47,27 @@ exports.obtenerPerfil = async (req, res) => {
 exports.actualizarPerfil = async (req, res) => {
     try {
         const usuarioId = req.usuario.id;
-        const { nombre, telefono, direccion_texto } = req.body;
+        const { nombre, telefono, direccion_texto, biografia, anos_experiencia } = req.body;
 
         if (!nombre) {
             return res.status(400).json({ mensaje: 'El nombre es obligatorio' });
         }
+        if (biografia && biografia.length > 500) {
+            return res.status(400).json({ mensaje: 'La descripción no puede pasar de 500 caracteres' });
+        }
+        if (anos_experiencia != null && (anos_experiencia < 0 || anos_experiencia > 60)) {
+            return res.status(400).json({ mensaje: 'Años de experiencia no válidos' });
+        }
 
         await db.query(
-            'UPDATE usuarios SET nombre = ?, telefono = ?, direccion_texto = ? WHERE id = ?',
-            [nombre.trim(), telefono || null, direccion_texto || null, usuarioId]
+            `UPDATE usuarios
+             SET nombre = ?, telefono = ?, direccion_texto = ?,
+                 biografia = COALESCE(?, biografia),
+                 anos_experiencia = COALESCE(?, anos_experiencia)
+             WHERE id = ?`,
+            [nombre.trim(), telefono || null, direccion_texto || null,
+            biografia != null ? biografia.trim() : null,
+            anos_experiencia ?? null, usuarioId]
         );
 
         return res.status(200).json({ mensaje: 'Perfil actualizado exitosamente' });
@@ -117,9 +129,10 @@ exports.getUserProfile = async (req, res) => {
             `SELECT 
                 u.id,
                 u.nombre AS nombreCompleto,
-                COALESCE(u.biografia, 'Sin descripción disponible.') AS biografia,
+                u.biografia,
                 COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
-                COALESCE(u.calificacion_promedio, 5.0) AS calificacionPromedio,
+                COALESCE(u.calificacion_promedio, 0) AS calificacionPromedio,
+                u.es_vip AS esVip,
                 u.latitud,
                 u.longitud,
                 u.rol,
@@ -137,8 +150,61 @@ exports.getUserProfile = async (req, res) => {
         if (rows.length === 0) {
             return res.status(404).json({ mensaje: 'Profesional no encontrado' });
         }
-
         const usuario = rows[0];
+
+        // Todas las especialidades del técnico (chips)
+        const [esp] = await db.query(
+            `SELECT c.nombre FROM tecnico_categorias tc
+             JOIN categorias c ON c.id = tc.categoria_id
+             WHERE tc.usuario_id = ?`,
+            [id]
+        );
+
+        // Trabajos completados
+        const [[{ completados }]] = await db.query(
+            `SELECT COUNT(*) AS completados
+             FROM postulaciones p
+             JOIN solicitudes s ON s.id = p.solicitud_id
+             WHERE p.tecnico_id = ? AND p.estado = 'aceptada' AND s.estado = 'completado'`,
+            [id]
+        );
+
+        // Reseñas: si la tabla tiene otras columnas, no rompe el perfil
+        let totalResenas = 0;
+        let promedio = Number(usuario.calificacionPromedio);
+        try {
+            const [[r]] = await db.query(
+                'SELECT COUNT(*) AS total, AVG(calificacion) AS promedio FROM resenas WHERE destinatario_id = ?',
+                [id]
+            );
+            totalResenas = Number(r.total);
+            if (totalResenas > 0) promedio = Number(r.promedio);
+        } catch (e) {
+            console.log('Aviso: no se pudo leer reseñas:', e.message);
+        }
+
+        let resenas = [];
+        try {
+            const [rows2] = await db.query(
+                `SELECT r.id, r.calificacion, r.comentario, r.creado_en, u.nombre AS autorNombre
+                 FROM resenas r
+                 JOIN usuarios u ON u.id = r.autor_id
+                 WHERE r.destinatario_id = ?
+                 ORDER BY r.creado_en DESC
+                 LIMIT 3`,
+                [id]
+            );
+            resenas = rows2.map(x => ({
+                id: x.id,
+                calificacion: x.calificacion,
+                comentario: x.comentario,
+                autorNombre: x.autorNombre,
+                creadoEn: x.creado_en
+            }));
+        } catch (e) {
+            console.log('Aviso: no se pudieron leer las reseñas:', e.message);
+        }
+
 
         return res.json({
             id: Number(usuario.id),
@@ -147,9 +213,13 @@ exports.getUserProfile = async (req, res) => {
             especialidad: usuario.especialidad,
             categoriaId: usuario.categoriaId ? Number(usuario.categoriaId) : null,
             anosExperiencia: Number(usuario.anosExperiencia),
-            calificacionPromedio: Number(usuario.calificacionPromedio),
-            totalResenas: 0,
+            calificacionPromedio: promedio,
+            totalResenas,
+            resenas,
             biografia: usuario.biografia,
+            esVip: Number(usuario.esVip) || 0,
+            trabajosCompletados: Number(completados),
+            especialidades: esp.map(e => e.nombre),
             latitud: usuario.latitud !== null ? Number(usuario.latitud) : null,
             longitud: usuario.longitud !== null ? Number(usuario.longitud) : null
         });
