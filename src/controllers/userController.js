@@ -2,14 +2,33 @@ const db = require('../db');
 const fs = require('fs');
 const path = require('path');
 
-// GET: Obtener datos del perfil actual
+// GET: Obtener datos del perfil actual (con su oficio si es técnico)
 exports.obtenerPerfil = async (req, res) => {
     try {
         const usuarioId = req.usuario.id;
         const [rows] = await db.query(
-            `SELECT id, nombre, correo, telefono, foto_url, rol, direccion_texto, 
-                    latitud, longitud, es_vip, calificacion_promedio, biografia, anos_experiencia 
-             FROM usuarios WHERE id = ?`,
+            `SELECT 
+                u.id, 
+                u.nombre, 
+                u.correo, 
+                u.telefono, 
+                u.foto_url, 
+                u.rol, 
+                u.direccion_texto, 
+                u.latitud, 
+                u.longitud, 
+                u.es_vip, 
+                u.calificacion_promedio, 
+                u.biografia, 
+                u.anos_experiencia,
+                COALESCE(c.nombre, 'Técnico Especialista') AS especialidad,
+                COALESCE(c.nombre, 'Técnico Especialista') AS oficio,
+                c.id AS categoria_id
+             FROM usuarios u
+             LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
+             LEFT JOIN categorias c ON tc.categoria_id = c.id
+             WHERE u.id = ?
+             LIMIT 1`,
             [usuarioId]
         );
 
@@ -46,27 +65,34 @@ exports.actualizarPerfil = async (req, res) => {
     }
 };
 
-// OBTENER TODOS LOS PROFESIONALES (CONSULTA DIRECTA A LA TABLA USUARIOS)
+// OBTENER TODOS LOS PROFESIONALES (CONSULTA DINÁMICA CON CATEGORÍA)
 exports.getProfesionales = async (req, res) => {
     try {
         const [rows] = await db.query(
             `SELECT 
-                id,
-                nombre AS nombreCompleto,
-                COALESCE(biografia, 'Sin descripción disponible.') AS biografia,
-                COALESCE(anos_experiencia, 0) AS anosExperiencia,
-                COALESCE(calificacion_promedio, 5.0) AS calificacionPromedio,
-                latitud,
-                longitud,
-                rol
-             FROM usuarios 
-             WHERE LOWER(rol) IN ('tecnico', 'profesional', 'ambos')`
+                u.id,
+                u.nombre AS nombreCompleto,
+                COALESCE(u.biografia, 'Sin descripción disponible.') AS biografia,
+                COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
+                COALESCE(u.calificacion_promedio, 5.0) AS calificacionPromedio,
+                u.latitud,
+                u.longitud,
+                u.rol,
+                COALESCE(c.nombre, 'Técnico Especialista') AS oficio,
+                COALESCE(c.nombre, 'Técnico Especialista') AS especialidad,
+                c.id AS categoriaId
+             FROM usuarios u
+             LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
+             LEFT JOIN categorias c ON tc.categoria_id = c.id
+             WHERE LOWER(u.rol) IN ('tecnico', 'profesional', 'ambos')`
         );
 
         const profesionales = rows.map(usuario => ({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
-            oficio: 'Técnico Especialista',
+            oficio: usuario.oficio,
+            especialidad: usuario.especialidad,
+            categoriaId: usuario.categoriaId ? Number(usuario.categoriaId) : null,
             anosExperiencia: Number(usuario.anosExperiencia),
             calificacionPromedio: Number(usuario.calificacionPromedio),
             totalResenas: 0,
@@ -82,23 +108,29 @@ exports.getProfesionales = async (req, res) => {
     }
 };
 
-// OBTENER DETALLE INDIVIDUAL
+// OBTENER DETALLE INDIVIDUAL (PANTALLA DE PERFIL DEL TÉCNICO)
 exports.getUserProfile = async (req, res) => {
     try {
         const { id } = req.params;
 
         const [rows] = await db.query(
             `SELECT 
-                id,
-                nombre AS nombreCompleto,
-                COALESCE(biografia, 'Sin descripción disponible.') AS biografia,
-                COALESCE(anos_experiencia, 0) AS anosExperiencia,
-                COALESCE(calificacion_promedio, 5.0) AS calificacionPromedio,
-                latitud,
-                longitud,
-                rol
-             FROM usuarios 
-             WHERE id = ?`,
+                u.id,
+                u.nombre AS nombreCompleto,
+                COALESCE(u.biografia, 'Sin descripción disponible.') AS biografia,
+                COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
+                COALESCE(u.calificacion_promedio, 5.0) AS calificacionPromedio,
+                u.latitud,
+                u.longitud,
+                u.rol,
+                COALESCE(c.nombre, 'Técnico Especialista') AS oficio,
+                COALESCE(c.nombre, 'Técnico Especialista') AS especialidad,
+                c.id AS categoriaId
+             FROM usuarios u
+             LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
+             LEFT JOIN categorias c ON tc.categoria_id = c.id
+             WHERE u.id = ?
+             LIMIT 1`,
             [id]
         );
 
@@ -111,7 +143,9 @@ exports.getUserProfile = async (req, res) => {
         return res.json({
             id: Number(usuario.id),
             nombreCompleto: usuario.nombreCompleto || 'Sin nombre',
-            oficio: 'Técnico Especialista',
+            oficio: usuario.oficio,
+            especialidad: usuario.especialidad,
+            categoriaId: usuario.categoriaId ? Number(usuario.categoriaId) : null,
             anosExperiencia: Number(usuario.anosExperiencia),
             calificacionPromedio: Number(usuario.calificacionPromedio),
             totalResenas: 0,
@@ -174,7 +208,6 @@ exports.subirFotoPortafolio = async (req, res) => {
             return res.status(400).json({ mensaje: 'No se envió ninguna imagen' });
         }
 
-        // Ruta pública accesible (ej: /uploads/foto-123456.jpg)
         const fotoUrl = `/uploads/${req.file.filename}`;
 
         const [resultado] = await db.query(
@@ -201,7 +234,6 @@ exports.eliminarFotoPortafolio = async (req, res) => {
         const usuarioId = req.usuario.id;
         const { fotoId } = req.params;
 
-        // 1. Verificar que la foto exista y pertenezca al técnico autenticado
         const [filas] = await db.query(
             'SELECT id, foto_url FROM portafolio_tecnico WHERE id = ? AND id_tecnico = ?',
             [fotoId, usuarioId]
@@ -213,13 +245,11 @@ exports.eliminarFotoPortafolio = async (req, res) => {
 
         const rutaRelativa = filas[0].foto_url;
 
-        // 2. Eliminar de la base de datos MySQL
         await db.query(
             'DELETE FROM portafolio_tecnico WHERE id = ? AND id_tecnico = ?',
             [fotoId, usuarioId]
         );
 
-        // 3. Borrar el archivo físico del disco
         const rutaFisica = path.join(__dirname, '../..', rutaRelativa);
         if (fs.existsSync(rutaFisica)) {
             fs.unlinkSync(rutaFisica);
@@ -241,7 +271,6 @@ exports.eliminarCuenta = async (req, res) => {
     try {
         const usuarioId = req.usuario.id;
 
-        // 1. Obtener la información básica para validar el rol y la foto de perfil
         const [usuario] = await db.query(
             'SELECT rol, foto_url FROM usuarios WHERE id = ?',
             [usuarioId]
@@ -253,7 +282,6 @@ exports.eliminarCuenta = async (req, res) => {
 
         const { rol, foto_url } = usuario[0];
 
-        // 2. Si es técnico, buscar y borrar los archivos del portafolio
         if (rol === 'tecnico' || rol === 'prestador') {
             try {
                 const [fotosPortafolio] = await db.query(
@@ -268,12 +296,10 @@ exports.eliminarCuenta = async (req, res) => {
                     }
                 });
             } catch (errorDb) {
-                // Si la tabla portafolio_tecnico aún no ha sido creada hoy, no detiene el proceso de borrado
                 console.log('Aviso: Omisión del borrado físico del portafolio (la tabla aún no existe):', errorDb.message);
             }
         }
 
-        // 3. Borrar la foto de perfil personal si tiene una distinta a la predeterminada
         if (foto_url && !foto_url.includes('default') && !foto_url.startsWith('http')) {
             const rutaFotoPerfil = path.join(__dirname, '../..', foto_url);
             if (fs.existsSync(rutaFotoPerfil)) {
@@ -281,14 +307,12 @@ exports.eliminarCuenta = async (req, res) => {
             }
         }
 
-        // 4. Eliminar registros del portafolio de la base de datos
         try {
             await db.query('DELETE FROM portafolio_tecnico WHERE id_tecnico = ?', [usuarioId]);
         } catch (errCascade) {
             console.log('Tabla de portafolio sin registros o inexistente al purgar.');
         }
 
-        // 5. Borrar el registro del usuario final de la base de datos
         const [resultado] = await db.query('DELETE FROM usuarios WHERE id = ?', [usuarioId]);
 
         if (resultado.affectedRows === 0) {

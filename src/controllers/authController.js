@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 exports.registrarUsuario = async (req, res) => {
-    const { nombre, correo, password, telefono, rol } = req.body;
+    const { nombre, correo, password, telefono, rol, especialidad, id_categoria } = req.body;
 
     if (!nombre || !correo || !password) {
         return res.status(400).json({ error: 'Nombre, correo y contraseña son obligatorios.' });
@@ -38,6 +38,28 @@ exports.registrarUsuario = async (req, res) => {
 
         const nuevoId = resultado.insertId;
 
+        // 3.1 Si es técnico y se envió categoría o especialidad, vincular en tecnico_categorias
+        let categoriaAsignada = null;
+        if (['tecnico', 'trabajador'].includes(rolAsignado.toLowerCase())) {
+            let catId = id_categoria;
+
+            // Si envió el texto en vez del ID, buscamos el ID por su nombre
+            if (!catId && especialidad) {
+                const [cats] = await db.query('SELECT id, nombre FROM categorias WHERE LOWER(nombre) = LOWER(?)', [especialidad.trim()]);
+                if (cats.length > 0) {
+                    catId = cats[0].id;
+                    categoriaAsignada = cats[0].nombre;
+                }
+            }
+
+            if (catId) {
+                await db.query(
+                    'INSERT INTO tecnico_categorias (usuario_id, categoria_id) VALUES (?, ?)',
+                    [nuevoId, catId]
+                );
+            }
+        }
+
         // 4. Generar Token JWT
         const token = jwt.sign(
             { id: nuevoId, correo, rol: rolAsignado },
@@ -54,7 +76,8 @@ exports.registrarUsuario = async (req, res) => {
                 nombre,
                 correo,
                 telefono: telefono || null,
-                rol: rolAsignado
+                rol: rolAsignado,
+                especialidad: categoriaAsignada || especialidad || null
             }
         });
 
@@ -72,8 +95,20 @@ exports.iniciarSesion = async (req, res) => {
     }
 
     try {
-        // Busca usuario por correo
-        const [usuarios] = await db.query('SELECT * FROM usuarios WHERE correo = ?', [correo]);
+        // Busca usuario por correo junto con su categoría si es técnico
+        const queryUsuario = `
+            SELECT 
+                u.*, 
+                c.id AS categoria_id,
+                c.nombre AS especialidad
+            FROM usuarios u
+            LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
+            LEFT JOIN categorias c ON tc.categoria_id = c.id
+            WHERE u.correo = ?
+            LIMIT 1
+        `;
+
+        const [usuarios] = await db.query(queryUsuario, [correo]);
         if (usuarios.length === 0) {
             return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
         }
@@ -118,7 +153,6 @@ exports.solicitarRecuperacion = async (req, res) => {
             return res.status(400).json({ mensaje: "El correo es obligatorio." });
         }
 
-        // Verifica que el usuario exista
         const [usuarios] = await db.query(
             "SELECT id FROM usuarios WHERE correo = ?",
             [correo.trim()]
@@ -128,16 +162,13 @@ exports.solicitarRecuperacion = async (req, res) => {
             return res.status(404).json({ mensaje: "No existe una cuenta registrada con ese correo." });
         }
 
-        // Generar código aleatorio de 6 dígitos
         const codigo = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // Guarda el código en la base de datos y deja codigo_expiracion en NULL
         await db.query(
             "UPDATE usuarios SET codigo_recuperacion = ?, codigo_expiracion = NULL WHERE correo = ?",
             [codigo, correo.trim()]
         );
 
-        // Envía el correo con Brevo
         await enviarCodigoRecuperacion(correo.trim(), codigo);
 
         return res.status(200).json({
@@ -172,7 +203,6 @@ exports.verificarCodigoOtp = async (req, res) => {
 
         const usuario = usuarios[0];
 
-        // Validar únicamente si el código coincide
         if (!usuario.codigo_recuperacion || usuario.codigo_recuperacion !== codigo.trim()) {
             return res.status(400).json({ mensaje: "El código ingresado es incorrecto." });
         }
@@ -196,7 +226,6 @@ exports.restablecerPassword = async (req, res) => {
             });
         }
 
-        // Buscar usuario por correo
         const [usuarios] = await db.query(
             "SELECT id, codigo_recuperacion FROM usuarios WHERE correo = ?",
             [correo.trim()]
@@ -208,16 +237,13 @@ exports.restablecerPassword = async (req, res) => {
 
         const usuario = usuarios[0];
 
-        // Verificar código
         if (!usuario.codigo_recuperacion || usuario.codigo_recuperacion !== codigo.trim()) {
             return res.status(400).json({ mensaje: "El código ingresado es incorrecto." });
         }
 
-        // Encriptar nueva contraseña
         const salt = await bcrypt.genSalt(10);
         const passwordEncriptada = await bcrypt.hash(nuevaPassword, salt);
 
-        // Actualizar contraseña y limpiar el código
         await db.query(
             `UPDATE usuarios 
              SET password = ?, codigo_recuperacion = NULL, codigo_expiracion = NULL 
