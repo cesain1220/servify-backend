@@ -81,7 +81,6 @@ const listarPostulacionesDeSolicitud = async (req, res) => {
              LEFT JOIN conversaciones c
                     ON c.solicitud_id = p.solicitud_id
                    AND c.tecnico_id = p.tecnico_id
-                   AND c.activa = 1
              WHERE p.solicitud_id = ? AND p.estado <> 'rechazada'
              ORDER BY FIELD(p.estado, 'aceptada', 'pendiente'), p.creado_en DESC`,
             [solicitudId]
@@ -213,7 +212,6 @@ const obtenerMisPostulaciones = async (req, res) => {
              LEFT JOIN conversaciones conv
                     ON conv.solicitud_id = p.solicitud_id
                    AND conv.tecnico_id = p.tecnico_id
-                   AND conv.activa = 1
              WHERE p.tecnico_id = ?
              ORDER BY p.creado_en DESC`,
             [req.usuario.id]
