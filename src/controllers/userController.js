@@ -1,6 +1,7 @@
 const db = require('../db');
 const fs = require('fs');
 const path = require('path');
+const cloudinary = require('../cloudinary');
 
 // GET: Obtener datos del perfil actual (con su oficio si es técnico)
 exports.obtenerPerfil = async (req, res) => {
@@ -273,24 +274,32 @@ exports.obtenerPortafolio = async (req, res) => {
 exports.subirFotoPortafolio = async (req, res) => {
     try {
         const usuarioId = req.usuario.id;
-
         if (!req.file) {
             return res.status(400).json({ mensaje: 'No se envió ninguna imagen' });
         }
 
-        const fotoUrl = `/uploads/${req.file.filename}`;
+        const subida = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
+                {
+                    folder: 'servify/portafolio',
+                    resource_type: 'image',
+                    transformation: [
+                        { width: 1280, height: 1280, crop: 'limit' },
+                        { quality: 'auto', fetch_format: 'auto' }
+                    ]
+                },
+                (err, result) => (err ? reject(err) : resolve(result))
+            ).end(req.file.buffer);
+        });
 
         const [resultado] = await db.query(
             'INSERT INTO portafolio_tecnico (id_tecnico, foto_url) VALUES (?, ?)',
-            [usuarioId, fotoUrl]
+            [usuarioId, subida.secure_url]
         );
 
         return res.status(201).json({
             mensaje: 'Foto agregada exitosamente',
-            foto: {
-                id: resultado.insertId,
-                foto_url: fotoUrl
-            }
+            foto: { id: resultado.insertId, foto_url: subida.secure_url }
         });
     } catch (error) {
         console.error('Error al subir foto:', error);
@@ -304,33 +313,20 @@ exports.eliminarFotoPortafolio = async (req, res) => {
         const usuarioId = req.usuario.id;
         const { fotoId } = req.params;
 
-        const [filas] = await db.query(
-            'SELECT id, foto_url FROM portafolio_tecnico WHERE id = ? AND id_tecnico = ?',
-            [fotoId, usuarioId]
-        );
-
-        if (filas.length === 0) {
-            return res.status(404).json({ mensaje: 'Foto no encontrada o no tienes permiso para eliminarla' });
-        }
-
-        const rutaRelativa = filas[0].foto_url;
-
-        await db.query(
+        const [resultado] = await db.query(
             'DELETE FROM portafolio_tecnico WHERE id = ? AND id_tecnico = ?',
             [fotoId, usuarioId]
         );
-
-        const rutaFisica = path.join(__dirname, '../..', rutaRelativa);
-        if (fs.existsSync(rutaFisica)) {
-            fs.unlinkSync(rutaFisica);
+        if (resultado.affectedRows === 0) {
+            return res.status(404).json({ mensaje: 'Foto no encontrada o sin permiso' });
         }
-
         return res.status(200).json({ mensaje: 'Foto eliminada con éxito' });
     } catch (error) {
         console.error('Error al eliminar foto:', error);
         return res.status(500).json({ mensaje: 'Error al eliminar la foto' });
     }
 };
+
 
 // ========================================================
 // 3. ELIMINAR CUENTA (CLIENTE Y TÉCNICO) - Requerido Google Play
