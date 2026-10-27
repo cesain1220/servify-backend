@@ -15,7 +15,7 @@ const crearSolicitud = async (req, res) => {
             return res.status(400).json({ mensaje: 'Falta la ubicación' });
         }
 
-        await db.query(
+        const [resultado] = await db.query(
             `INSERT INTO solicitudes
             (cliente_id, categoria_id, titulo, descripcion, presupuesto_estimado, latitud, longitud, direccion_texto, estado)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendiente')`,
@@ -23,7 +23,7 @@ const crearSolicitud = async (req, res) => {
                 latitud, longitud, direccion_texto || null]
         );
 
-        return res.status(200).json({ mensaje: 'Solicitud creada con éxito' });
+        return res.status(200).json({ mensaje: 'Solicitud creada con éxito', id: resultado.insertId });
     } catch (error) {
         console.error('Error al crear solicitud:', error);
         return res.status(500).json({
