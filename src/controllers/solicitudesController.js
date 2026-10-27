@@ -23,7 +23,12 @@ const crearSolicitud = async (req, res) => {
                 latitud, longitud, direccion_texto || null]
         );
 
-        return res.status(200).json({ mensaje: 'Solicitud creada con éxito', id: resultado.insertId });
+        console.log('[crearSolicitud v2] insertId:', resultado.insertId);
+
+        return res.status(200).json({
+            mensaje: 'Solicitud creada v2',
+            id: resultado.insertId
+        });
     } catch (error) {
         console.error('Error al crear solicitud:', error);
         return res.status(500).json({
