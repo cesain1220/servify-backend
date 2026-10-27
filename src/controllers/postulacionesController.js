@@ -81,7 +81,6 @@ const listarPostulacionesDeSolicitud = async (req, res) => {
              LEFT JOIN conversaciones c
                     ON c.solicitud_id = p.solicitud_id
                    AND c.tecnico_id = p.tecnico_id
-                   AND c.activa = 1
              WHERE p.solicitud_id = ? AND p.estado <> 'rechazada'
              ORDER BY FIELD(p.estado, 'aceptada', 'pendiente'), p.creado_en DESC`,
             [solicitudId]
@@ -183,13 +182,15 @@ const cancelarAcuerdo = async (req, res) => {
 
         await conn.query("UPDATE postulaciones SET estado = 'rechazada' WHERE id = ?", [post.id]);
         await conn.query("UPDATE solicitudes SET estado = 'pendiente' WHERE id = ?", [sol.id]);
+
+        // borra la conversasion de la base de datos
         await conn.query(
-            'UPDATE conversaciones SET activa = 0 WHERE solicitud_id = ? AND tecnico_id = ?',
+            'DELETE FROM conversaciones WHERE solicitud_id = ? AND tecnico_id = ?',
             [sol.id, post.tecnico_id]
         );
 
         await conn.commit();
-        return res.json({ mensaje: 'Acuerdo cancelado. Tu solicitud vuelve a estar disponible' });
+        return res.json({ mensaje: 'Acuerdo cancelado y chat eliminado con éxito' });
     } catch (error) {
         await conn.rollback();
         return responderError(res, error, 'Error interno al cancelar el acuerdo');
@@ -211,7 +212,6 @@ const obtenerMisPostulaciones = async (req, res) => {
              LEFT JOIN conversaciones conv
                     ON conv.solicitud_id = p.solicitud_id
                    AND conv.tecnico_id = p.tecnico_id
-                   AND conv.activa = 1
              WHERE p.tecnico_id = ?
              ORDER BY p.creado_en DESC`,
             [req.usuario.id]

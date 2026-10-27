@@ -81,4 +81,22 @@ const marcarLeidos = async (req, res) => {
     }
 };
 
-module.exports = { obtenerConversacionDe, listarConversaciones, obtenerMensajes, marcarLeidos };
+// Eliminar conversación y disparar el borrado en cascada de los mensajes
+const eliminarConversacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const conv = await obtenerConversacionDe(id, req.usuario.id);
+        if (!conv) return res.status(404).json({ mensaje: 'Conversación no encontrada o sin acceso' });
+
+      
+        // MySQL borra automáticamente todos los mensajes hijos por el ON DELETE CASCADE.
+        await db.query('DELETE FROM conversaciones WHERE id = ?', [id]);
+
+        return res.json({ mensaje: 'Conversación y mensajes eliminados correctamente' });
+    } catch (error) {
+        console.error('Error al eliminar la conversación:', error);
+        return res.status(500).json({ mensaje: 'Error interno al eliminar la conversación' });
+    }
+};
+
+module.exports = { obtenerConversacionDe, listarConversaciones, obtenerMensajes, marcarLeidos, eliminarConversacion };
