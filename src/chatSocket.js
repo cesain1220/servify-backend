@@ -89,12 +89,14 @@ module.exports = (io) => {
 
                 console.log(`[BACKEND] Oferta guardada con ID ${mensajeId}, emitiendo a la sala conv:${conversacion_id}`);
 
-                // 4. Reenviar a TODOS en la sala usando exactamente 'mensaje_nuevo'
+                // 4. Reeddddnviar a TODOS en la sala usando exactamente 'mensaje_nuevo'
                 io.to(`conv:${conversacion_id}`).emit('mensaje_nuevo', mensajeOferta);
 
             } catch (error) {
-                console.error('[BACKEND ERROR] Error al procesar enviar_oferta:', error);
-            }
+                console.error('Error al enviar oferta:', error);
+                // Opcional: Avisar al socket que lo mandó exactamente qué falló
+                socket.emit('error_operacion', { mensaje: error.message });
+            } 
         });
 
         // 2. Responder a una oferta (Aceptar o Rechazar)
