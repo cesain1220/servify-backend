@@ -58,18 +58,21 @@ module.exports = (io) => {
         });
 
         // 1. Enviar una nueva oferta económica
+        // Enviar una nueva oferta económica
         socket.on('enviar_oferta', async (data) => {
             try {
                 const { conversacion_id, monto } = data;
-                const emisor_id = socket.usuario.id; // Aseguramos que venga del token seguro
+                const emisor_id = socket.usuario.id;
 
-                // Cancelar cualquier oferta anterior pendiente en esta conversación
+                console.log(`[BACKEND] Recibida oferta de $${monto} para conv:${conversacion_id} por usuario ${emisor_id}`);
+
+                // 1. Cancelar oferta anterior pendiente
                 await db.query(
                     `UPDATE mensajes SET estado_oferta = 'cancelada' WHERE conversacion_id = ? AND estado_oferta = 'pendiente'`,
                     [conversacion_id]
                 );
 
-                // Insertar el nuevo mensaje tipo oferta
+                // 2. Insertar la oferta
                 const [result] = await db.query(
                     `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta) VALUES (?, ?, ?, 'oferta', ?, 'pendiente')`,
                     [conversacion_id, emisor_id, `Propuesta de oferta: $${monto}`, monto]
@@ -77,16 +80,20 @@ module.exports = (io) => {
 
                 const mensajeId = result.insertId;
 
+                // 3. Consultar el mensaje completo recién creado
                 const [[mensajeOferta]] = await db.query(
                     `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
-                     FROM mensajes WHERE id = ?`,
+             FROM mensajes WHERE id = ?`,
                     [mensajeId]
                 );
 
-                // Emitir a todos en la sala unificada con los dos puntos (conv:id)
+                console.log(`[BACKEND] Oferta guardada con ID ${mensajeId}, emitiendo a la sala conv:${conversacion_id}`);
+
+                // 4. Reenviar a TODOS en la sala usando exactamente 'mensaje_nuevo'
                 io.to(`conv:${conversacion_id}`).emit('mensaje_nuevo', mensajeOferta);
+
             } catch (error) {
-                console.error('Error al enviar oferta:', error);
+                console.error('[BACKEND ERROR] Error al procesar enviar_oferta:', error);
             }
         });
 
