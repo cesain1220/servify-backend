@@ -28,7 +28,7 @@ module.exports = (io) => {
             }
         });
 
-        // Enviar mensaje: se guarda en MySQL y se reenvía a la sala
+        // Enviar mensaje de texto normal
         socket.on('enviar_mensaje', async ({ conversacionId, contenido } = {}, ack) => {
             try {
                 const texto = (contenido || '').trim();
@@ -44,7 +44,7 @@ module.exports = (io) => {
                     [conversacionId, socket.usuario.id, texto]
                 );
                 const [[mensaje]] = await db.query(
-                    `SELECT id, conversacion_id, emisor_id, contenido, leido, enviado_en
+                    `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
                      FROM mensajes WHERE id = ?`,
                     [r.insertId]
                 );
@@ -54,6 +54,110 @@ module.exports = (io) => {
             } catch (e) {
                 console.error('Error al enviar mensaje:', e);
                 ack?.({ ok: false, error: 'Error interno' });
+            }
+        });
+
+        // 1. Enviar una nueva oferta económica
+        socket.on('enviar_oferta', async (data) => {
+            try {
+                const { conversacion_id, monto } = data;
+                const emisor_id = socket.usuario.id; // Aseguramos que venga del token seguro
+
+                // Cancelar cualquier oferta anterior pendiente en esta conversación
+                await db.query(
+                    `UPDATE mensajes SET estado_oferta = 'cancelada' WHERE conversacion_id = ? AND estado_oferta = 'pendiente'`,
+                    [conversacion_id]
+                );
+
+                // Insertar el nuevo mensaje tipo oferta
+                const [result] = await db.query(
+                    `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta) VALUES (?, ?, ?, 'oferta', ?, 'pendiente')`,
+                    [conversacion_id, emisor_id, `Propuesta de oferta: $${monto}`, monto]
+                );
+
+                const mensajeId = result.insertId;
+
+                const [[mensajeOferta]] = await db.query(
+                    `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
+                     FROM mensajes WHERE id = ?`,
+                    [mensajeId]
+                );
+
+                // Emitir a todos en la sala unificada con los dos puntos (conv:id)
+                io.to(`conv:${conversacion_id}`).emit('mensaje_nuevo', mensajeOferta);
+            } catch (error) {
+                console.error('Error al enviar oferta:', error);
+            }
+        });
+
+        // 2. Responder a una oferta (Aceptar o Rechazar)
+        socket.on('responder_oferta', async (data) => {
+            try {
+                const { mensaje_id, conversacion_id, accion } = data; // accion: 'aceptar' o 'rechazar'
+                const usuario_id = socket.usuario.id;
+
+                if (accion === 'aceptar') {
+                    // Obtener el monto de la oferta
+                    const [[oferta]] = await db.query(`SELECT monto, conversacion_id FROM mensajes WHERE id = ?`, [mensaje_id]);
+                    if (!oferta) return;
+
+                    // Marcar esta oferta como aceptada
+                    await db.query(`UPDATE mensajes SET estado_oferta = 'aceptada' WHERE id = ?`, [mensaje_id]);
+
+                    // Cancelar otras ofertas pendientes
+                    await db.query(`UPDATE mensajes SET estado_oferta = 'cancelada' WHERE conversacion_id = ? AND estado_oferta = 'pendiente'`, [conversacion_id]);
+
+                    // Obtener la solicitud_id asociada a la conversación para actualizar el monto_final
+                    const [[conv]] = await db.query(`SELECT solicitud_id, cliente_id, tecnico_id FROM conversaciones WHERE id = ?`, [conversacion_id]);
+
+                    if (conv) {
+                        await db.query(`UPDATE solicitudes SET monto_final = ?, estado = 'en_proceso' WHERE id = ?`, [oferta.monto, conv.solicitud_id]);
+                        await db.query(`UPDATE postulaciones SET monto_final = ? WHERE solicitud_id = ? AND tecnico_id = ?`, [oferta.monto, conv.solicitud_id, conv.tecnico_id]);
+                    }
+
+                    // Crear mensaje de sistema informando el cierre del acuerdo
+                    const [sysRes] = await db.query(
+                        `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo) VALUES (?, ?, ?, 'sistema')`,
+                        [conversacion_id, usuario_id, `¡Acuerdo cerrado por $${oferta.monto}!`]
+                    );
+
+                    const [[mensajeSistema]] = await db.query(
+                        `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
+                         FROM mensajes WHERE id = ?`,
+                        [sysRes.insertId]
+                    );
+
+                    io.to(`conv:${conversacion_id}`).emit('oferta_actualizada', {
+                        mensaje_id,
+                        estado_oferta: 'aceptada',
+                        monto_final: oferta.monto
+                    });
+
+                    io.to(`conv:${conversacion_id}`).emit('mensaje_nuevo', mensajeSistema);
+
+                } else if (accion === 'rechazar') {
+                    await db.query(`UPDATE mensajes SET estado_oferta = 'rechazada' WHERE id = ?`, [mensaje_id]);
+
+                    const [sysRes] = await db.query(
+                        `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo) VALUES (?, ?, ?, 'sistema')`,
+                        [conversacion_id, usuario_id, `Se rechazó la propuesta económica.`]
+                    );
+
+                    const [[mensajeSistema]] = await db.query(
+                        `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
+                         FROM mensajes WHERE id = ?`,
+                        [sysRes.insertId]
+                    );
+
+                    io.to(`conv:${conversacion_id}`).emit('oferta_actualizada', {
+                        mensaje_id,
+                        estado_oferta: 'rechazada'
+                    });
+
+                    io.to(`conv:${conversacion_id}`).emit('mensaje_nuevo', mensajeSistema);
+                }
+            } catch (error) {
+                console.error('Error al responder oferta:', error);
             }
         });
     });
