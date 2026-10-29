@@ -49,7 +49,7 @@ const obtenerMensajes = async (req, res) => {
 
         const despuesDe = parseInt(req.query.despues_de) || 0;
         const [mensajes] = await db.query(
-            `SELECT id, conversacion_id, emisor_id, contenido, leido, enviado_en
+            `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
              FROM mensajes
              WHERE conversacion_id = ? AND id > ?
              ORDER BY id ASC
