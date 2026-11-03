@@ -12,7 +12,7 @@ const crearSolicitud = async (req, res) => {
             return res.status(400).json({ mensaje: 'Faltan datos obligatorios' });
         }
         if (latitud == null || longitud == null) {
-            return res.status(400).json({ mensaje: 'Falta la ubicación' });
+            return res.status(400).json({ mensaje: 'Falta la ubicaciÃ³n' });
         }
 
         const [resultado] = await db.query(
@@ -25,7 +25,7 @@ const crearSolicitud = async (req, res) => {
 
         console.log('[crearSolicitud v2] insertId:', resultado.insertId);
 
-        return res.status(200).json({ mensaje: 'Solicitud creada con éxito', id: resultado.insertId });
+        return res.status(200).json({ mensaje: 'Solicitud creada con Ã©xito', id: resultado.insertId });
     } catch (error) {
         console.error('Error al crear solicitud:', error);
         return res.status(500).json({
@@ -56,6 +56,7 @@ const obtenerSolicitudes = async (req, res) => {
             `SELECT s.id, s.cliente_id, u.nombre AS cliente_nombre,
                     c.nombre AS categoria_nombre, s.titulo, s.descripcion,
                     s.presupuesto_estimado, s.creado_en,
+                    s.latitud, s.longitud,
                     ${tieneUbicacion ? SQL_DISTANCIA : 'NULL'} AS distancia_km
              FROM solicitudes s
              JOIN usuarios u ON u.id = s.cliente_id
@@ -120,6 +121,7 @@ const obtenerSolicitudPorId = async (req, res) => {
                     u.calificacion_promedio AS cliente_calificacion,
                     c.nombre AS categoria_nombre, s.titulo, s.descripcion,
                     s.presupuesto_estimado, s.direccion_texto, s.estado, s.creado_en,
+                    s.latitud, s.longitud,
                     ${tieneUbicacion ? SQL_DISTANCIA : 'NULL'} AS distancia_km
              FROM solicitudes s
              JOIN usuarios u ON u.id = s.cliente_id
