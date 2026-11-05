@@ -2,6 +2,10 @@ const jwt = require('jsonwebtoken');
 const db = require('./db');
 const { obtenerConversacionDe } = require('./controllers/chatController');
 
+const SELECT_MENSAJE = `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto,
+                               estado_oferta, leido, enviado_en
+                        FROM mensajes WHERE id = ?`;
+
 module.exports = (io) => {
     // Autenticación al conectar
     io.use((socket, next) => {
@@ -16,10 +20,17 @@ module.exports = (io) => {
     });
 
     io.on('connection', (socket) => {
-        // Entrar a la sala de una conversación
+        const yoId = socket.usuario.id;
+
+        // Sala personal: sirve para avisar llamadas en cualquier pantalla
+        socket.join(`user:${yoId}`);
+
+        const otroDe = (conv) => (conv.cliente_id === yoId ? conv.tecnico_id : conv.cliente_id);
+
+        // ---------- Entrar a la sala de una conversación ----------
         socket.on('unirse', async (conversacionId, ack) => {
             try {
-                const conv = await obtenerConversacionDe(conversacionId, socket.usuario.id);
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
                 if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
                 socket.join(`conv:${conversacionId}`);
                 ack?.({ ok: true });
@@ -28,26 +39,22 @@ module.exports = (io) => {
             }
         });
 
-        // Enviar mensaje de texto normal
+        // ---------- Mensaje de texto ----------
         socket.on('enviar_mensaje', async ({ conversacionId, contenido } = {}, ack) => {
             try {
                 const texto = (contenido || '').trim();
                 if (!conversacionId || !texto) return ack?.({ ok: false, error: 'Mensaje vacío' });
                 if (texto.length > 2000) return ack?.({ ok: false, error: 'Mensaje demasiado largo' });
 
-                const conv = await obtenerConversacionDe(conversacionId, socket.usuario.id);
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
                 if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
                 if (conv.activa !== 1) return ack?.({ ok: false, error: 'La conversación está cerrada' });
 
                 const [r] = await db.query(
                     'INSERT INTO mensajes (conversacion_id, emisor_id, contenido) VALUES (?, ?, ?)',
-                    [conversacionId, socket.usuario.id, texto]
+                    [conversacionId, yoId, texto]
                 );
-                const [[mensaje]] = await db.query(
-                    `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
-                     FROM mensajes WHERE id = ?`,
-                    [r.insertId]
-                );
+                const [[mensaje]] = await db.query(SELECT_MENSAJE, [r.insertId]);
 
                 io.to(`conv:${conversacionId}`).emit('mensaje_nuevo', mensaje);
                 ack?.({ ok: true, mensaje });
@@ -57,116 +64,169 @@ module.exports = (io) => {
             }
         });
 
-        // 1. Enviar una nueva oferta económica
-        // Enviar una nueva oferta económica
-        socket.on('enviar_oferta', async (data) => {
+        // ---------- Enviar oferta económica ----------
+        socket.on('enviar_oferta', async (data = {}, ack) => {
             try {
-                const { conversacion_id, monto } = data;
-                const emisor_id = socket.usuario.id;
+                const conversacionId = data.conversacion_id;
+                const monto = Number(data.monto);
 
-                console.log(`[BACKEND] Recibida oferta de $${monto} para conv:${conversacion_id} por usuario ${emisor_id}`);
+                if (!conversacionId || !(monto > 0) || monto > 1000000) {
+                    socket.emit('error_operacion', { mensaje: 'Monto no válido' });
+                    return ack?.({ ok: false, error: 'Monto no válido' });
+                }
 
-                // 1. Cancelar oferta anterior pendiente
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
+                if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
+                if (conv.activa !== 1) return ack?.({ ok: false, error: 'La conversación está cerrada' });
+
+                // Solo una oferta pendiente a la vez
                 await db.query(
-                    `UPDATE mensajes SET estado_oferta = 'cancelada' WHERE conversacion_id = ? AND estado_oferta = 'pendiente'`,
-                    [conversacion_id]
+                    `UPDATE mensajes SET estado_oferta = 'cancelada'
+                     WHERE conversacion_id = ? AND estado_oferta = 'pendiente'`,
+                    [conversacionId]
                 );
 
-                // 2. Insertar la oferta
-                const [result] = await db.query(
-                    `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta) VALUES (?, ?, ?, 'oferta', ?, 'pendiente')`,
-                    [conversacion_id, emisor_id, `Propuesta de oferta: $${monto}`, monto]
+                const [r] = await db.query(
+                    `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta)
+                     VALUES (?, ?, ?, 'oferta', ?, 'pendiente')`,
+                    [conversacionId, yoId, `Propuesta de oferta: $${monto.toFixed(2)}`, monto]
                 );
+                const [[mensajeOferta]] = await db.query(SELECT_MENSAJE, [r.insertId]);
 
-                const mensajeId = result.insertId;
-
-                // 3. Consultar el mensaje completo recién creado
-                const [[mensajeOferta]] = await db.query(
-                    `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
-             FROM mensajes WHERE id = ?`,
-                    [mensajeId]
-                );
-
-                console.log(`[BACKEND] Oferta guardada con ID ${mensajeId}, emitiendo a la sala conv:${conversacion_id}`);
-
-                // 4. Reeddddnviar a TODOS en la sala usando exactamente 'mensaje_nuevo'
-                io.to(`conv:${conversacion_id}`).emit('mensaje_nuevo', mensajeOferta);
-
+                io.to(`conv:${conversacionId}`).emit('mensaje_nuevo', mensajeOferta);
+                ack?.({ ok: true });
             } catch (error) {
                 console.error('Error al enviar oferta:', error);
-                // Opcional: Avisar al socket que lo mandó exactamente qué falló
-                socket.emit('error_operacion', { mensaje: error.message });
-            } 
+                socket.emit('error_operacion', { mensaje: 'No se pudo enviar la oferta' });
+                ack?.({ ok: false, error: 'Error interno' });
+            }
         });
 
-        // 2. Responder a una oferta (Aceptar o Rechazar)
-        socket.on('responder_oferta', async (data) => {
+        // ---------- Responder oferta (aceptar / rechazar) ----------
+        socket.on('responder_oferta', async (data = {}, ack) => {
+            let conn;
             try {
-                const { mensaje_id, conversacion_id, accion } = data; // accion: 'aceptar' o 'rechazar'
-                const usuario_id = socket.usuario.id;
-
-                if (accion === 'aceptar') {
-                    // Obtener el monto de la oferta
-                    const [[oferta]] = await db.query(`SELECT monto, conversacion_id FROM mensajes WHERE id = ?`, [mensaje_id]);
-                    if (!oferta) return;
-
-                    // Marcar esta oferta como aceptada
-                    await db.query(`UPDATE mensajes SET estado_oferta = 'aceptada' WHERE id = ?`, [mensaje_id]);
-
-                    // Cancelar otras ofertas pendientes
-                    await db.query(`UPDATE mensajes SET estado_oferta = 'cancelada' WHERE conversacion_id = ? AND estado_oferta = 'pendiente'`, [conversacion_id]);
-
-                    // Obtener la solicitud_id asociada a la conversación para actualizar el monto_final
-                    const [[conv]] = await db.query(`SELECT solicitud_id, cliente_id, tecnico_id FROM conversaciones WHERE id = ?`, [conversacion_id]);
-
-                    if (conv) {
-                        await db.query(`UPDATE solicitudes SET monto_final = ?, estado = 'en_proceso' WHERE id = ?`, [oferta.monto, conv.solicitud_id]);
-                        await db.query(`UPDATE postulaciones SET monto_final = ? WHERE solicitud_id = ? AND tecnico_id = ?`, [oferta.monto, conv.solicitud_id, conv.tecnico_id]);
-                    }
-
-                    // Crear mensaje de sistema informando el cierre del acuerdo
-                    const [sysRes] = await db.query(
-                        `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo) VALUES (?, ?, ?, 'sistema')`,
-                        [conversacion_id, usuario_id, `¡Acuerdo cerrado por $${oferta.monto}!`]
-                    );
-
-                    const [[mensajeSistema]] = await db.query(
-                        `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
-                         FROM mensajes WHERE id = ?`,
-                        [sysRes.insertId]
-                    );
-
-                    io.to(`conv:${conversacion_id}`).emit('oferta_actualizada', {
-                        mensaje_id,
-                        estado_oferta: 'aceptada',
-                        monto_final: oferta.monto
-                    });
-
-                    io.to(`conv:${conversacion_id}`).emit('mensaje_nuevo', mensajeSistema);
-
-                } else if (accion === 'rechazar') {
-                    await db.query(`UPDATE mensajes SET estado_oferta = 'rechazada' WHERE id = ?`, [mensaje_id]);
-
-                    const [sysRes] = await db.query(
-                        `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo) VALUES (?, ?, ?, 'sistema')`,
-                        [conversacion_id, usuario_id, `Se rechazó la propuesta económica.`]
-                    );
-
-                    const [[mensajeSistema]] = await db.query(
-                        `SELECT id, conversacion_id, emisor_id, contenido, tipo, monto, estado_oferta, leido, enviado_en
-                         FROM mensajes WHERE id = ?`,
-                        [sysRes.insertId]
-                    );
-
-                    io.to(`conv:${conversacion_id}`).emit('oferta_actualizada', {
-                        mensaje_id,
-                        estado_oferta: 'rechazada'
-                    });
-
-                    io.to(`conv:${conversacion_id}`).emit('mensaje_nuevo', mensajeSistema);
+                const { mensaje_id, accion } = data;
+                if (!mensaje_id || !['aceptar', 'rechazar'].includes(accion)) {
+                    return ack?.({ ok: false, error: 'Datos no válidos' });
                 }
+
+                conn = await db.getConnection();
+                await conn.beginTransaction();
+
+                // La conversación se saca de la oferta, nunca de lo que mande la app
+                const [[oferta]] = await conn.query(
+                    `SELECT id, conversacion_id, emisor_id, monto, estado_oferta
+                     FROM mensajes WHERE id = ? AND tipo = 'oferta' FOR UPDATE`,
+                    [mensaje_id]
+                );
+                if (!oferta) throw new Error('Oferta no encontrada');
+
+                const [[conv]] = await conn.query(
+                    `SELECT id, cliente_id, tecnico_id, solicitud_id, activa
+                     FROM conversaciones
+                     WHERE id = ? AND (cliente_id = ? OR tecnico_id = ?)`,
+                    [oferta.conversacion_id, yoId, yoId]
+                );
+                if (!conv) throw new Error('Sin acceso');
+                if (conv.activa !== 1) throw new Error('La conversación está cerrada');
+                if (oferta.emisor_id === yoId) throw new Error('No puedes responder tu propia oferta');
+                if (oferta.estado_oferta !== 'pendiente') throw new Error('La oferta ya no está disponible');
+
+                let textoSistema;
+                if (accion === 'aceptar') {
+                    await conn.query(`UPDATE mensajes SET estado_oferta = 'aceptada' WHERE id = ?`, [oferta.id]);
+                    await conn.query(
+                        `UPDATE mensajes SET estado_oferta = 'cancelada'
+                         WHERE conversacion_id = ? AND estado_oferta = 'pendiente'`,
+                        [conv.id]
+                    );
+                    await conn.query(
+                        `UPDATE solicitudes SET monto_final = ?, estado = 'en_proceso' WHERE id = ?`,
+                        [oferta.monto, conv.solicitud_id]
+                    );
+                    await conn.query(
+                        `UPDATE postulaciones SET monto_final = ? WHERE solicitud_id = ? AND tecnico_id = ?`,
+                        [oferta.monto, conv.solicitud_id, conv.tecnico_id]
+                    );
+                    textoSistema = `¡Acuerdo cerrado por $${Number(oferta.monto).toFixed(2)}!`;
+                } else {
+                    await conn.query(`UPDATE mensajes SET estado_oferta = 'rechazada' WHERE id = ?`, [oferta.id]);
+                    textoSistema = 'Se rechazó la propuesta económica.';
+                }
+
+                const [sys] = await conn.query(
+                    `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo)
+                     VALUES (?, ?, ?, 'sistema')`,
+                    [conv.id, yoId, textoSistema]
+                );
+                const [[mensajeSistema]] = await conn.query(SELECT_MENSAJE, [sys.insertId]);
+
+                await conn.commit();
+
+                const sala = `conv:${conv.id}`;
+                io.to(sala).emit('oferta_actualizada', {
+                    mensaje_id: oferta.id,
+                    estado_oferta: accion === 'aceptar' ? 'aceptada' : 'rechazada',
+                    ...(accion === 'aceptar' ? { monto_final: oferta.monto } : {})
+                });
+                io.to(sala).emit('mensaje_nuevo', mensajeSistema);
+                ack?.({ ok: true });
             } catch (error) {
-                console.error('Error al responder oferta:', error);
+                if (conn) await conn.rollback();
+                console.error('Error al responder oferta:', error.message);
+                socket.emit('error_operacion', { mensaje: error.message });
+                ack?.({ ok: false, error: error.message });
+            } finally {
+                if (conn) conn.release();
+            }
+        });
+
+        // ---------- Llamadas ----------
+        // A inicia la llamada
+        socket.on('llamar', async ({ conversacionId, esVideo } = {}, ack) => {
+            try {
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
+                if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
+                if (conv.activa !== 1) return ack?.({ ok: false, error: 'Conversación cerrada' });
+
+                const [[yo]] = await db.query('SELECT nombre FROM usuarios WHERE id = ?', [yoId]);
+
+                io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', {
+                    conversacionId,
+                    esVideo: !!esVideo,
+                    deId: yoId,
+                    deNombre: yo?.nombre || 'Usuario'
+                });
+                ack?.({ ok: true });
+            } catch (e) {
+                console.error('Error en llamar:', e);
+                ack?.({ ok: false, error: 'Error interno' });
+            }
+        });
+
+        // B acepta o rechaza
+        socket.on('responder_llamada', async ({ conversacionId, aceptar } = {}) => {
+            try {
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
+                if (!conv) return;
+                io.to(`user:${otroDe(conv)}`).emit('llamada_respondida', {
+                    conversacionId,
+                    aceptada: !!aceptar
+                });
+            } catch (e) {
+                console.error('Error en responder_llamada:', e);
+            }
+        });
+
+        // A cuelga antes de que contesten
+        socket.on('cancelar_llamada', async ({ conversacionId } = {}) => {
+            try {
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
+                if (!conv) return;
+                io.to(`user:${otroDe(conv)}`).emit('llamada_cancelada', { conversacionId });
+            } catch (e) {
+                console.error('Error en cancelar_llamada:', e);
             }
         });
     });
