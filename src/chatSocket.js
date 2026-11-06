@@ -186,24 +186,7 @@ module.exports = (io) => {
         // A inicia la llamada
         socket.on('llamar', async ({ conversacionId, esVideo } = {}, ack) => {
             try {
-                const conv = await obtenerConversacionDe(conversacionId, yoId);
-                if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
-                if (conv.activa !== 1) return ack?.({ ok: false, error: 'Conversación cerrada' });
-
-                const [[yo]] = await db.query('SELECT nombre FROM usuarios WHERE id = ?', [yoId]);
-
-                io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', {
-                    conversacionId,
-                    esVideo: !!esVideo,
-                    deId: yoId,
-                    deNombre: yo?.nombre || 'Usuario'
-                });
-                ack?.({ ok: true });
-            } catch (e) {
-                console.error('Error en llamar:', e);
-                ack?.({ ok: false, error: 'Error interno' });
-            }
-        });
+                const conv = await obtenerConversacionDe(conversacionId, yoId); if (!conv) return ack?.({ ok: false, error: 'Sin acceso' }); if (conv.activa !== 1) return ack?.({ ok: false, error: 'Conversación cerrada' }); const [[yo]] = await db.query('SELECT nombre FROM usuarios WHERE id = ?', [yoId]); const datosLlamada = { conversacionId, esVideo: !!esVideo, deId: yoId, deNombre: yo?.nombre || 'Usuario' }; // 1. Avisar a su sala personal (para cuando está en la app fuera del chat) io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', datosLlamada); // 2. ¡Y avisar también a la sala de la conversación! (Para cuando está dentro del chat viendo los mensajes) io.to(`conv:${conversacionId}`).emit('llamada_entrante', datosLlamada); ack?.({ ok: true }); } catch (e) { console.error('Error en llamar:', e); ack?.({ ok: false, error: 'Error interno' }); } });
 
         // B acepta o rechaza
         socket.on('responder_llamada', async ({ conversacionId, aceptar } = {}) => {
