@@ -13,6 +13,7 @@
   "type": "commonjs",
   "dependencies": {
     "@getbrevo/brevo": "^6.0.3",
+    "agora-token": "^2.0.7",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
