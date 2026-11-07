@@ -1,6 +1,6 @@
 const db = require('../db');
 
-// Verifica que el usuario pertenezca a la conversaci髇
+// Verifica que el usuario pertenezca a la conversaci贸n
 const obtenerConversacionDe = async (conversacionId, usuarioId) => {
     const [rows] = await db.query(
         `SELECT id, cliente_id, tecnico_id, solicitud_id, activa
@@ -11,7 +11,7 @@ const obtenerConversacionDe = async (conversacionId, usuarioId) => {
     return rows[0] || null;
 };
 
-// Lista mis conversaciones con 鷏timo mensaje y no le韉os
+// Lista mis conversaciones con 煤ltimo mensaje y no le铆dos
 const listarConversaciones = async (req, res) => {
     try {
         const yo = req.usuario.id;
@@ -40,12 +40,12 @@ const listarConversaciones = async (req, res) => {
     }
 };
 
-// Historial de una conversaci髇. ?despues_de=ID trae solo los mensajes nuevos (para reconectar)
+// Historial de una conversaci贸n. ?despues_de=ID trae solo los mensajes nuevos (para reconectar)
 const obtenerMensajes = async (req, res) => {
     try {
         const { id } = req.params;
         const conv = await obtenerConversacionDe(id, req.usuario.id);
-        if (!conv) return res.status(404).json({ mensaje: 'Conversaci髇 no encontrada' });
+        if (!conv) return res.status(404).json({ mensaje: 'Conversaci贸n no encontrada' });
 
         const despuesDe = parseInt(req.query.despues_de) || 0;
         const [mensajes] = await db.query(
@@ -63,40 +63,45 @@ const obtenerMensajes = async (req, res) => {
     }
 };
 
-// Marca como le韉os los mensajes del otro
+// Marca como le铆dos los mensajes del otro
 const marcarLeidos = async (req, res) => {
     try {
         const { id } = req.params;
         const conv = await obtenerConversacionDe(id, req.usuario.id);
-        if (!conv) return res.status(404).json({ mensaje: 'Conversaci髇 no encontrada' });
+        if (!conv) return res.status(404).json({ mensaje: 'Conversaci贸n no encontrada' });
 
         await db.query(
             'UPDATE mensajes SET leido = 1 WHERE conversacion_id = ? AND emisor_id <> ? AND leido = 0',
             [id, req.usuario.id]
         );
-        return res.json({ mensaje: 'Mensajes marcados como le韉os' });
+        return res.json({ mensaje: 'Mensajes marcados como le铆dos' });
     } catch (error) {
-        console.error('Error al marcar le韉os:', error);
-        return res.status(500).json({ mensaje: 'Error interno al marcar le韉os' });
+        console.error('Error al marcar le铆dos:', error);
+        return res.status(500).json({ mensaje: 'Error interno al marcar le铆dos' });
     }
 };
 
-// Eliminar conversaci髇 y disparar el borrado en cascada de los mensajes
+// Eliminar conversaci贸n y disparar el borrado en cascada de los mensajes
 const eliminarConversacion = async (req, res) => {
     try {
         const { id } = req.params;
         const conv = await obtenerConversacionDe(id, req.usuario.id);
-        if (!conv) return res.status(404).json({ mensaje: 'Conversaci髇 no encontrada o sin acceso' });
+        if (!conv) return res.status(404).json({ mensaje: 'Conversaci贸n no encontrada o sin acceso' });
 
-      
-        // MySQL borra autom醫icamente todos los mensajes hijos por el ON DELETE CASCADE.
+        // MySQL borra autom谩ticamente todos los mensajes hijos por el ON DELETE CASCADE.
         await db.query('DELETE FROM conversaciones WHERE id = ?', [id]);
 
-        return res.json({ mensaje: 'Conversaci髇 y mensajes eliminados correctamente' });
+        return res.json({ mensaje: 'Conversaci贸n y mensajes eliminados correctamente' });
     } catch (error) {
-        console.error('Error al eliminar la conversaci髇:', error);
-        return res.status(500).json({ mensaje: 'Error interno al eliminar la conversaci髇' });
+        console.error('Error al eliminar la conversaci贸n:', error);
+        return res.status(500).json({ mensaje: 'Error interno al eliminar la conversaci贸n' });
     }
 };
 
-module.exports = { obtenerConversacionDe, listarConversaciones, obtenerMensajes, marcarLeidos, eliminarConversacion };
+module.exports = { 
+    obtenerConversacionDe, 
+    listarConversaciones, 
+    obtenerMensajes, 
+    marcarLeidos, 
+    eliminarConversacion 
+};
