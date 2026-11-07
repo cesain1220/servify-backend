@@ -7,7 +7,7 @@ const SELECT_MENSAJE = `SELECT id, conversacion_id, emisor_id, contenido, tipo, 
                         FROM mensajes WHERE id = ?`;
 
 module.exports = (io) => {
-    // Autenticación al conectar
+    // AutenticaciÃ³n al conectar
     io.use((socket, next) => {
         try {
             const token = socket.handshake.auth?.token;
@@ -15,7 +15,7 @@ module.exports = (io) => {
             socket.usuario = jwt.verify(token, process.env.JWT_SECRET || 'clave_secreta_servify');
             next();
         } catch (e) {
-            next(new Error('Token inválido'));
+            next(new Error('Token invÃ¡lido'));
         }
     });
 
@@ -27,7 +27,7 @@ module.exports = (io) => {
 
         const otroDe = (conv) => (conv.cliente_id === yoId ? conv.tecnico_id : conv.cliente_id);
 
-        // ---------- Entrar a la sala de una conversación ----------
+        // ---------- Entrar a la sala de una conversaciÃ³n ----------
         socket.on('unirse', async (conversacionId, ack) => {
             try {
                 const conv = await obtenerConversacionDe(conversacionId, yoId);
@@ -43,12 +43,12 @@ module.exports = (io) => {
         socket.on('enviar_mensaje', async ({ conversacionId, contenido } = {}, ack) => {
             try {
                 const texto = (contenido || '').trim();
-                if (!conversacionId || !texto) return ack?.({ ok: false, error: 'Mensaje vacío' });
+                if (!conversacionId || !texto) return ack?.({ ok: false, error: 'Mensaje vacÃ­o' });
                 if (texto.length > 2000) return ack?.({ ok: false, error: 'Mensaje demasiado largo' });
 
                 const conv = await obtenerConversacionDe(conversacionId, yoId);
                 if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
-                if (conv.activa !== 1) return ack?.({ ok: false, error: 'La conversación está cerrada' });
+                if (conv.activa !== 1) return ack?.({ ok: false, error: 'La conversaciÃ³n estÃ¡ cerrada' });
 
                 const [r] = await db.query(
                     'INSERT INTO mensajes (conversacion_id, emisor_id, contenido) VALUES (?, ?, ?)',
@@ -64,20 +64,20 @@ module.exports = (io) => {
             }
         });
 
-        // ---------- Enviar oferta económica ----------
+        // ---------- Enviar oferta econÃ³mica ----------
         socket.on('enviar_oferta', async (data = {}, ack) => {
             try {
                 const conversacionId = data.conversacion_id;
                 const monto = Number(data.monto);
 
                 if (!conversacionId || !(monto > 0) || monto > 1000000) {
-                    socket.emit('error_operacion', { mensaje: 'Monto no válido' });
-                    return ack?.({ ok: false, error: 'Monto no válido' });
+                    socket.emit('error_operacion', { mensaje: 'Monto no vÃ¡lido' });
+                    return ack?.({ ok: false, error: 'Monto no vÃ¡lido' });
                 }
 
                 const conv = await obtenerConversacionDe(conversacionId, yoId);
                 if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
-                if (conv.activa !== 1) return ack?.({ ok: false, error: 'La conversación está cerrada' });
+                if (conv.activa !== 1) return ack?.({ ok: false, error: 'La conversaciÃ³n estÃ¡ cerrada' });
 
                 // Solo una oferta pendiente a la vez
                 await db.query(
@@ -108,13 +108,12 @@ module.exports = (io) => {
             try {
                 const { mensaje_id, accion } = data;
                 if (!mensaje_id || !['aceptar', 'rechazar'].includes(accion)) {
-                    return ack?.({ ok: false, error: 'Datos no válidos' });
+                    return ack?.({ ok: false, error: 'Datos no vÃ¡lidos' });
                 }
 
                 conn = await db.getConnection();
                 await conn.beginTransaction();
 
-                // La conversación se saca de la oferta, nunca de lo que mande la app
                 const [[oferta]] = await conn.query(
                     `SELECT id, conversacion_id, emisor_id, monto, estado_oferta
                      FROM mensajes WHERE id = ? AND tipo = 'oferta' FOR UPDATE`,
@@ -129,9 +128,9 @@ module.exports = (io) => {
                     [oferta.conversacion_id, yoId, yoId]
                 );
                 if (!conv) throw new Error('Sin acceso');
-                if (conv.activa !== 1) throw new Error('La conversación está cerrada');
+                if (conv.activa !== 1) throw new Error('La conversaciÃ³n estÃ¡ cerrada');
                 if (oferta.emisor_id === yoId) throw new Error('No puedes responder tu propia oferta');
-                if (oferta.estado_oferta !== 'pendiente') throw new Error('La oferta ya no está disponible');
+                if (oferta.estado_oferta !== 'pendiente') throw new Error('La oferta ya no estÃ¡ disponible');
 
                 let textoSistema;
                 if (accion === 'aceptar') {
@@ -149,10 +148,10 @@ module.exports = (io) => {
                         `UPDATE postulaciones SET monto_final = ? WHERE solicitud_id = ? AND tecnico_id = ?`,
                         [oferta.monto, conv.solicitud_id, conv.tecnico_id]
                     );
-                    textoSistema = `¡Acuerdo cerrado por $${Number(oferta.monto).toFixed(2)}!`;
+                    textoSistema = `Â¡Acuerdo cerrado por $${Number(oferta.monto).toFixed(2)}!`;
                 } else {
                     await conn.query(`UPDATE mensajes SET estado_oferta = 'rechazada' WHERE id = ?`, [oferta.id]);
-                    textoSistema = 'Se rechazó la propuesta económica.';
+                    textoSistema = 'Se rechazÃ³ la propuesta econÃ³mica.';
                 }
 
                 const [sys] = await conn.query(
@@ -183,10 +182,24 @@ module.exports = (io) => {
         });
 
         // ---------- Llamadas ----------
-        // A inicia la llamada
         socket.on('llamar', async ({ conversacionId, esVideo } = {}, ack) => {
             try {
-                const conv = await obtenerConversacionDe(conversacionId, yoId); if (!conv) return ack?.({ ok: false, error: 'Sin acceso' }); if (conv.activa !== 1) return ack?.({ ok: false, error: 'Conversación cerrada' }); const [[yo]] = await db.query('SELECT nombre FROM usuarios WHERE id = ?', [yoId]); const datosLlamada = { conversacionId, esVideo: !!esVideo, deId: yoId, deNombre: yo?.nombre || 'Usuario' }; // 1. Avisar a su sala personal (para cuando está en la app fuera del chat) io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', datosLlamada); // 2. ¡Y avisar también a la sala de la conversación! (Para cuando está dentro del chat viendo los mensajes) io.to(`conv:${conversacionId}`).emit('llamada_entrante', datosLlamada); ack?.({ ok: true }); } catch (e) { console.error('Error en llamar:', e); ack?.({ ok: false, error: 'Error interno' }); } });
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
+                if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
+                if (conv.activa !== 1) return ack?.({ ok: false, error: 'ConversaciÃ³n cerrada' });
+
+                const [[yo]] = await db.query('SELECT nombre FROM usuarios WHERE id = ?', [yoId]);
+                const datosLlamada = { conversacionId, esVideo: !!esVideo, deId: yoId, deNombre: yo?.nombre || 'Usuario' };
+
+                io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', datosLlamada);
+                io.to(`conv:${conversacionId}`).emit('llamada_entrante', datosLlamada);
+
+                ack?.({ ok: true });
+            } catch (e) {
+                console.error('Error en llamar:', e);
+                ack?.({ ok: false, error: 'Error interno' });
+            }
+        });
 
         // B acepta o rechaza
         socket.on('responder_llamada', async ({ conversacionId, aceptar } = {}) => {
