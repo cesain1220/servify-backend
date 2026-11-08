@@ -402,7 +402,8 @@ exports.obtenerResenasUsuario = async (req, res) => {
         const usuarioId = req.usuario.id; // Funciona tanto si es cliente como técnico
 
         const query = `
-            SELECT r.id, r.calificacion, r.comentario, r.creado_en, u.nombre AS nombre_cliente
+            SELECT r.id, r.autor_id, r.destinatario_id, r.calificacion, r.comentario, r.creado_en,
+       u.nombre AS nombre_cliente
             FROM resenas r
             JOIN usuarios u ON r.autor_id = u.id
             WHERE r.destinatario_id = ?
