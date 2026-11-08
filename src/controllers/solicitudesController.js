@@ -144,7 +144,7 @@ const obtenerSolicitudPorId = async (req, res) => {
 
         const [rows] = await db.query(
             `SELECT s.id, s.cliente_id, u.nombre AS cliente_nombre,
-                    u.calificacion_promedio AS cliente_calificacion,
+                    (SELECT COALESCE(AVG(calificacion), 0) FROM resenas WHERE destinatario_id = u.id) AS cliente_calificacion,
                     c.nombre AS categoria_nombre, s.titulo, s.descripcion,
                     s.presupuesto_estimado, s.direccion_texto, s.estado, s.creado_en,
                     s.latitud, s.longitud,
