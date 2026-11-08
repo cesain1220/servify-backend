@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { listarConversaciones, obtenerMensajes, marcarLeidos, eliminarConversacion } = require('../controllers/chatController');
+const { listarConversaciones,listarLlamadas, obtenerMensajes, marcarLeidos, eliminarConversacion } = require('../controllers/chatController');
 const authMiddleware = require('../middlewares/authMiddleware');
 
 router.get('/llamadas', authMiddleware, listarLlamadas);
