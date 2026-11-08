@@ -397,9 +397,9 @@ exports.eliminarCuenta = async (req, res) => {
     }
 };
 
-exports.obtenerResenasTecnico = async (req, res) => {
+exports.obtenerResenasUsuario = async (req, res) => {
     try {
-        const tecnicoId = req.usuario.id;
+        const usuarioId = req.usuario.id; // Funciona tanto si es cliente como técnico
 
         const query = `
             SELECT r.id, r.calificacion, r.comentario, r.creado_en, u.nombre AS nombre_cliente
@@ -409,10 +409,10 @@ exports.obtenerResenasTecnico = async (req, res) => {
             ORDER BY r.creado_en DESC
         `;
 
-        const [resenas] = await db.query(query, [tecnicoId]);
+        const [resenas] = await db.query(query, [usuarioId]);
         return res.status(200).json(resenas);
     } catch (error) {
-        console.error("Error al obtener reseñas del técnico:", error);
+        console.error("Error al obtener reseñas del usuario:", error);
         return res.status(500).json({ mensaje: "Error al obtener las reseñas" });
     }
 };
