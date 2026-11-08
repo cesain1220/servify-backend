@@ -257,27 +257,35 @@ module.exports = (io) => {
                 );
                 const [[yo]] = await db.query('SELECT nombre FROM usuarios WHERE id = ?', [yoId]);
 
-                io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', {
+                //  Generar el canal y el Token con 'agora-token'
+                const canal = `chat_${conversacionId}`;
+                const expira = Math.floor(Date.now() / 1000) + 7200; // 2 horas
+                const token = RtcTokenBuilder.buildTokenWithUid(
+                    process.env.AGORA_APP_ID,
+                    process.env.AGORA_APP_CERTIFICATE,
+                    canal,
+                    0,
+                    RtcRole.PUBLISHER,
+                    expira
+                );
+
+                const datosLlamada = {
                     conversacionId,
                     esVideo: !!esVideo,
                     deId: yoId,
-                    deNombre: yo?.nombre || 'Usuario',
-                    llamadaId: r.insertId
-                });
+                    deName: yo?.nombre || 'Usuario',
+                    llamadaId: r.insertId,
+                    canal, //  lo mandamos al receptor
+                    token  //  lo mandamos al receptor
+                };
 
-                const destinoId = otroDe(conv);
-                setTimeout(async () => {
-                    try {
-                        const l = await llamadaActiva(conversacionId);
-                        if (l && l.id === r.insertId && l.estado === 'sonando') {
-                            await cerrarLlamada(l, 'perdida');
-                            io.to(`user:${destinoId}`).emit('llamada_cancelada', { conversacionId });
-                            io.to(`user:${yoId}`).emit('llamada_respondida', { conversacionId, aceptada: false });
-                        }
-                    } catch (e) { console.error('Timeout de llamada:', e); }
-                }, 45000);
+                // enviar al otro usuario la llamada entrante con el token
+                io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', datosLlamada);
 
-                ack?.({ ok: true, llamadaId: r.insertId });
+               
+
+                // Devolver el canal y el token al emisor en el ack
+                ack?.({ ok: true, llamadaId: r.insertId, canal, token });
             } catch (e) {
                 console.error('Error en llamar:', e);
                 ack?.({ ok: false, error: 'Error interno' });
