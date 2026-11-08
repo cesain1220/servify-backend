@@ -1,4 +1,5 @@
 const db = require('../db');
+const crypto = require('crypto');
 
 const SQL_DISTANCIA = `(6371 * ACOS(LEAST(1, COS(RADIANS(?)) * COS(RADIANS(s.latitud)) *
     COS(RADIANS(s.longitud) - RADIANS(?)) + SIN(RADIANS(?)) * SIN(RADIANS(s.latitud)))))`;
@@ -185,7 +186,7 @@ const obtenerSolicitudPorId = async (req, res) => {
 };
 
 // ==========================================
-// NUEVOS MÉTODOS: CONTRATACIÓN DIRECTA
+// MÉTODOS: CONTRATACIÓN DIRECTA
 // ==========================================
 
 const crearContratacionDirecta = async (req, res) => {
@@ -282,6 +283,111 @@ const responderContratacion = async (req, res) => {
     }
 };
 
+// ==========================================
+// NUEVOS MÉTODOS: CIERRE DE SERVICIO, QR Y RESEÑAS
+// ==========================================
+
+const iniciarCierre = async (req, res) => {
+    const { id } = req.params;
+    const { metodo_pago, tecnico_id } = req.body;
+
+    if (!metodo_pago || !['efectivo', 'tarjeta'].includes(metodo_pago)) {
+        return res.status(400).json({ ok: false, mensaje: 'Método de pago inválido (debe ser efectivo o tarjeta)' });
+    }
+
+    try {
+        const qrToken = `SERVIFY-SOL-${id}-${crypto.randomBytes(8).toString('hex')}`;
+        const estadoPago = (metodo_pago === 'tarjeta') ? 'pagado' : 'pendiente';
+
+        await db.query(
+            `UPDATE solicitudes 
+             SET estado = 'esperando_pago', 
+                 tecnico_id = COALESCE(tecnico_id, ?), 
+                 metodo_pago = ?, 
+                 estado_pago = ?, 
+                 codigo_qr_token = ? 
+             WHERE id = ?`,
+            [tecnico_id || null, metodo_pago, estadoPago, qrToken, id]
+        );
+
+        return res.json({
+            ok: true,
+            mensaje: 'Cierre iniciado exitosamente',
+            qr_token: qrToken,
+            metodo_pago,
+            estado_pago: estadoPago
+        });
+    } catch (error) {
+        console.error('Error al iniciar cierre:', error);
+        return res.status(500).json({ ok: false, error: 'Error al iniciar cierre de servicio' });
+    }
+};
+
+const validarQr = async (req, res) => {
+    const { qr_token, tecnico_id } = req.body;
+
+    if (!qr_token) {
+        return res.status(400).json({ ok: false, mensaje: 'Código QR no proporcionado' });
+    }
+
+    try {
+        const [rows] = await db.query(
+            `SELECT * FROM solicitudes WHERE codigo_qr_token = ? AND estado = 'esperando_pago'`,
+            [qr_token]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ ok: false, mensaje: 'Código QR inválido o expirado' });
+        }
+
+        const solicitud = rows[0];
+
+        await db.query(
+            `UPDATE solicitudes SET estado = 'completado', estado_pago = 'pagado' WHERE id = ?`,
+            [solicitud.id]
+        );
+
+        return res.json({
+            ok: true,
+            mensaje: '¡Trabajo completado exitosamente!',
+            solicitud_id: solicitud.id,
+            cliente_id: solicitud.cliente_id,
+            tecnico_id: solicitud.tecnico_id || tecnico_id
+        });
+    } catch (error) {
+        console.error('Error al validar QR:', error);
+        return res.status(500).json({ ok: false, error: 'Error al validar código QR' });
+    }
+};
+
+const crearResena = async (req, res) => {
+    const { autor_id, destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario } = req.body;
+
+    if (!autor_id || !destinatario_id || !calificacion) {
+        return res.status(400).json({ ok: false, mensaje: 'autor_id, destinatario_id y calificacion son obligatorios' });
+    }
+
+    try {
+        await db.query(
+            `INSERT INTO resenas (autor_id, destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [autor_id, destinatario_id, solicitud_id || null, contratacion_directa_id || null, calificacion, comentario || '']
+        );
+
+        await db.query(
+            `UPDATE usuarios 
+             SET calificacion_promedio = (SELECT COALESCE(AVG(calificacion), 0.00) FROM resenas WHERE destinatario_id = ?)
+             WHERE id = ?`,
+            [destinatario_id, destinatario_id]
+        );
+
+        return res.json({ ok: true, mensaje: 'Reseña registrada con éxito' });
+    } catch (error) {
+        console.error('Error al crear reseña:', error);
+        return res.status(500).json({ ok: false, error: 'Error al registrar reseña' });
+    }
+};
+
 module.exports = {
     crearSolicitud,
     obtenerSolicitudes,
@@ -289,5 +395,8 @@ module.exports = {
     obtenerSolicitudPorId,
     crearContratacionDirecta,
     obtenerContratacionesTecnico,
-    responderContratacion
+    responderContratacion,
+    iniciarCierre,
+    validarQr,
+    crearResena
 };

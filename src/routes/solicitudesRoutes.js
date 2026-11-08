@@ -8,7 +8,10 @@ const {
     obtenerSolicitudPorId,
     crearContratacionDirecta,
     obtenerContratacionesTecnico,
-    responderContratacion
+    responderContratacion,
+    iniciarCierre,
+    validarQr,
+    crearResena
 } = require('../controllers/solicitudesController');
 const { subirFotosSolicitud } = require('../controllers/fotosController');
 const authMiddleware = require('../middlewares/authMiddleware');
@@ -40,6 +43,11 @@ router.post('/:id/fotos', authMiddleware, recibirFotos, subirFotosSolicitud);
 router.post('/directas', authMiddleware, crearContratacionDirecta);
 router.get('/directas/tecnico', authMiddleware, obtenerContratacionesTecnico);
 router.patch('/directas/:id/estado', authMiddleware, responderContratacion);
+
+// Rutas de cierre de servicio, scanner QR y reseñas
+router.post('/:id/iniciar-cierre', authMiddleware, iniciarCierre);
+router.post('/validar-qr', authMiddleware, validarQr);
+router.post('/resenas', authMiddleware, crearResena);
 
 // Nota: Esta ruta con parametro :id debe ir al final para no colisionar con /mias o /directas
 router.get('/:id', authMiddleware, obtenerSolicitudPorId);
