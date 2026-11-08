@@ -156,4 +156,110 @@ const obtenerSolicitudPorId = async (req, res) => {
     }
 };
 
-module.exports = { crearSolicitud, obtenerSolicitudes, obtenerMisSolicitudes, obtenerSolicitudPorId };
+// ==========================================
+// NUEVOS MÉTODOS: CONTRATACIÓN DIRECTA
+// ==========================================
+
+const crearContratacionDirecta = async (req, res) => {
+    try {
+        const cliente_id = req.usuario.id;
+        const { tecnico_id, categoria_id, descripcion, monto_acordado } = req.body;
+
+        if (!tecnico_id || !categoria_id || !descripcion) {
+            return res.status(400).json({ mensaje: 'Faltan campos obligatorios (tecnico_id, categoria_id, descripcion)' });
+        }
+
+        const [resultado] = await db.query(
+            `INSERT INTO contrataciones_directas 
+            (cliente_id, tecnico_id, categoria_id, descripcion, monto_acordado, estado)
+            VALUES (?, ?, ?, ?, ?, 'pendiente')`,
+            [cliente_id, tecnico_id, categoria_id, descripcion, monto_acordado || null]
+        );
+
+        return res.status(201).json({
+            ok: true,
+            mensaje: 'Contratación directa enviada con éxito',
+            id: resultado.insertId
+        });
+    } catch (error) {
+        console.error('Error al crear contratación directa:', error);
+        return res.status(500).json({
+            mensaje: 'Error interno al crear contratación directa',
+            detalle: error.sqlMessage || error.message
+        });
+    }
+};
+
+const obtenerContratacionesTecnico = async (req, res) => {
+    try {
+        const tecnico_id = req.usuario.id;
+
+        const [rows] = await db.query(
+            `SELECT 
+                cd.id,
+                cd.cliente_id,
+                cd.tecnico_id,
+                cd.categoria_id,
+                cd.descripcion,
+                cd.monto_acordado,
+                cd.estado,
+                cd.creado_en,
+                u.nombre AS cliente_nombre,
+                u.foto_url AS cliente_foto,
+                u.telefono AS cliente_telefono,
+                c.nombre AS categoria_nombre
+             FROM contrataciones_directas cd
+             JOIN usuarios u ON cd.cliente_id = u.id
+             JOIN categorias c ON cd.categoria_id = c.id
+             WHERE cd.tecnico_id = ?
+             ORDER BY cd.creado_en DESC`,
+            [tecnico_id]
+        );
+
+        return res.json(rows);
+    } catch (error) {
+        console.error('Error al obtener contrataciones directas:', error);
+        return res.status(500).json({
+            mensaje: 'Error interno al obtener contrataciones directas',
+            detalle: error.sqlMessage || error.message
+        });
+    }
+};
+
+const responderContratacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { estado } = req.body; // 'aceptado' o 'rechazado'
+
+        if (!['aceptado', 'rechazado'].includes(estado)) {
+            return res.status(400).json({ mensaje: 'Estado no válido (debe ser aceptado o rechazado)' });
+        }
+
+        const [resultado] = await db.query(
+            `UPDATE contrataciones_directas SET estado = ? WHERE id = ?`,
+            [estado, id]
+        );
+
+        if (resultado.affectedRows === 0) {
+            return res.status(404).json({ mensaje: 'Contratación directa no encontrada' });
+        }
+
+        return res.json({ ok: true, mensaje: `Contratación ${estado} con éxito` });
+    } catch (error) {
+        console.error('Error al responder contratación directa:', error);
+        return res.status(500).json({
+            mensaje: 'Error interno al responder contratación',
+            detalle: error.sqlMessage || error.message
+        });
+    }
+};
+
+module.exports = {
+    crearSolicitud,
+    obtenerSolicitudes,
+    obtenerMisSolicitudes,
+    obtenerSolicitudPorId,
+    crearContratacionDirecta,
+    obtenerContratacionesTecnico,
+    responderContratacion
+};

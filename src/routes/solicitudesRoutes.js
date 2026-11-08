@@ -2,7 +2,13 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const {
-    crearSolicitud, obtenerSolicitudes, obtenerMisSolicitudes, obtenerSolicitudPorId
+    crearSolicitud,
+    obtenerSolicitudes,
+    obtenerMisSolicitudes,
+    obtenerSolicitudPorId,
+    crearContratacionDirecta,
+    obtenerContratacionesTecnico,
+    responderContratacion
 } = require('../controllers/solicitudesController');
 const { subirFotosSolicitud } = require('../controllers/fotosController');
 const authMiddleware = require('../middlewares/authMiddleware');
@@ -13,7 +19,7 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024, files: 5 },
     fileFilter: (req, file, cb) => {
         if (file.mimetype.startsWith('image/')) cb(null, true);
-        else cb(new Error('Solo se permiten imágenes'));
+        else cb(new Error('Solo se permiten imÃ¡genes'));
     }
 });
 
@@ -24,10 +30,18 @@ const recibirFotos = (req, res, next) => {
     });
 };
 
+// Rutas generales de solicitudes
 router.post('/', authMiddleware, crearSolicitud);
 router.get('/', authMiddleware, obtenerSolicitudes);
 router.get('/mias', authMiddleware, obtenerMisSolicitudes);
 router.post('/:id/fotos', authMiddleware, recibirFotos, subirFotosSolicitud);
+
+// Rutas de contrataciones directas
+router.post('/directas', authMiddleware, crearContratacionDirecta);
+router.get('/directas/tecnico', authMiddleware, obtenerContratacionesTecnico);
+router.patch('/directas/:id/estado', authMiddleware, responderContratacion);
+
+// Nota: Esta ruta con parametro :id debe ir al final para no colisionar con /mias o /directas
 router.get('/:id', authMiddleware, obtenerSolicitudPorId);
 
 module.exports = router;
