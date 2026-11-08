@@ -82,17 +82,43 @@ const obtenerSolicitudes = async (req, res) => {
 
 const obtenerMisSolicitudes = async (req, res) => {
     try {
+        const cliente_id = req.usuario.id;
+
+        // Unificamos solicitudes públicas y contrataciones directas del cliente
         const [rows] = await db.query(
-            `SELECT s.id, s.titulo, s.descripcion, s.presupuesto_estimado, s.estado, s.creado_en,
-                    c.nombre AS categoria_nombre,
-                    (SELECT COUNT(*) FROM postulaciones p
-                      WHERE p.solicitud_id = s.id AND p.estado IN ('pendiente','aceptada')) AS total_propuestas
+            `SELECT 
+                s.id, 
+                s.titulo, 
+                s.descripcion, 
+                s.presupuesto_estimado, 
+                s.estado, 
+                s.creado_en,
+                c.nombre AS categoria_nombre,
+                (SELECT COUNT(*) FROM postulaciones p
+                  WHERE p.solicitud_id = s.id AND p.estado IN ('pendiente','aceptada')) AS total_propuestas
              FROM solicitudes s
              JOIN categorias c ON c.id = s.categoria_id
              WHERE s.cliente_id = ?
-             ORDER BY s.creado_en DESC`,
-            [req.usuario.id]
+
+             UNION ALL
+
+             SELECT 
+                cd.id,
+                CONCAT('Contratación Directa: ', c.nombre) AS titulo,
+                cd.descripcion,
+                cd.monto_acordado AS presupuesto_estimado,
+                cd.estado,
+                cd.creado_en,
+                c.nombre AS categoria_nombre,
+                0 AS total_propuestas
+             FROM contrataciones_directas cd
+             JOIN categorias c ON c.id = cd.categoria_id
+             WHERE cd.cliente_id = ?
+
+             ORDER BY creado_en DESC`,
+            [cliente_id, cliente_id]
         );
+
         return res.json(rows);
     } catch (error) {
         console.error('Error al listar mis solicitudes:', error);
