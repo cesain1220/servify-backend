@@ -35,7 +35,7 @@ router.post('/portafolio', verificarToken, recibirFoto, userController.subirFoto
 router.delete('/portafolio/:fotoId', verificarToken, userController.eliminarFotoPortafolio);
 
 // --- COLOCA ESTA RUTA ANTES DE '/:id' PARA QUE EXPRESS NO LA CONFUNDA CON UN PARÁMETRO ---
-router.get('/tecnico/resenas', verificarToken, userController.obtenerResenasUsuario);
+router.get('/resenas', verificarToken, userController.obtenerResenasUsuario);
 
 // Detalle individual
 router.get('/:id', userController.getUserProfile);
