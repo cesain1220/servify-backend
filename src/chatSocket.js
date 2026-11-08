@@ -6,6 +6,9 @@ const SELECT_MENSAJE = `SELECT id, conversacion_id, emisor_id, contenido, tipo, 
                                estado_oferta, leido, enviado_en
                         FROM mensajes WHERE id = ?`;
 
+const formatoDuracion = (seg) =>
+    `${String(Math.floor(seg / 60)).padStart(2, '0')}:${String(seg % 60).padStart(2, '0')}`;
+
 module.exports = (io) => {
     // Autenticación al conectar
     io.use((socket, next) => {
@@ -79,6 +82,17 @@ module.exports = (io) => {
                 if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
                 if (conv.activa !== 1) return ack?.({ ok: false, error: 'La conversación está cerrada' });
 
+                // Si ya hay un acuerdo cerrado, no se permiten más ofertas
+                const [[yaAcordado]] = await db.query(
+                    `SELECT id FROM mensajes
+                     WHERE conversacion_id = ? AND tipo = 'oferta' AND estado_oferta = 'aceptada' LIMIT 1`,
+                    [conversacionId]
+                );
+                if (yaAcordado) {
+                    socket.emit('error_operacion', { mensaje: 'Ya llegaron a un acuerdo' });
+                    return ack?.({ ok: false, error: 'Ya llegaron a un acuerdo' });
+                }
+
                 // Solo una oferta pendiente a la vez
                 await db.query(
                     `UPDATE mensajes SET estado_oferta = 'cancelada'
@@ -114,7 +128,6 @@ module.exports = (io) => {
                 conn = await db.getConnection();
                 await conn.beginTransaction();
 
-                // La conversación se saca de la oferta, nunca de lo que mande la app
                 const [[oferta]] = await conn.query(
                     `SELECT id, conversacion_id, emisor_id, monto, estado_oferta
                      FROM mensajes WHERE id = ? AND tipo = 'oferta' FOR UPDATE`,
@@ -149,7 +162,7 @@ module.exports = (io) => {
                         `UPDATE postulaciones SET monto_final = ? WHERE solicitud_id = ? AND tecnico_id = ?`,
                         [oferta.monto, conv.solicitud_id, conv.tecnico_id]
                     );
-                    textoSistema = `¡Acuerdo cerrado por $${Number(oferta.monto).toFixed(2)}!`;
+                    textoSistema = `Acuerdo cerrado por $${Number(oferta.monto).toFixed(2)}`;
                 } else {
                     await conn.query(`UPDATE mensajes SET estado_oferta = 'rechazada' WHERE id = ?`, [oferta.id]);
                     textoSistema = 'Se rechazó la propuesta económica.';
@@ -182,17 +195,116 @@ module.exports = (io) => {
             }
         });
 
-        // ---------- Llamadas ----------
+        // =====================================================
+        // LLAMADAS con registro en el chat
+        // =====================================================
+
+        // Escribe el mensaje de la llamada y lo reparte a la sala del chat
+        const registrarMensajeLlamada = async (conversacionId, emisorId, llamadaId, texto) => {
+            const [r] = await db.query(
+                `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo, llamada_id)
+                 VALUES (?, ?, ?, 'sistema', ?)`,
+                [conversacionId, emisorId, texto, llamadaId]
+            );
+            const [[msg]] = await db.query(SELECT_MENSAJE, [r.insertId]);
+            io.to(`conv:${conversacionId}`).emit('mensaje_nuevo', msg);
+        };
+
+        // Cierra una llamada y deja el registro. Devuelve false si ya estaba cerrada.
+        const cerrarLlamada = async (llamada, estadoFinal) => {
+            const [res] = await db.query(
+                `UPDATE llamadas
+                 SET estado = ?, finalizada_en = NOW(),
+                     duracion_seg = IF(contestada_en IS NULL, NULL, TIMESTAMPDIFF(SECOND, contestada_en, NOW()))
+                 WHERE id = ? AND estado IN ('sonando','en_curso')`,
+                [estadoFinal, llamada.id]
+            );
+            if (res.affectedRows === 0) return false;
+
+            const [[l]] = await db.query('SELECT duracion_seg FROM llamadas WHERE id = ?', [llamada.id]);
+            const tipo = llamada.es_video ? 'Videollamada' : 'Llamada de voz';
+            const textos = {
+                completada: `${tipo} · ${formatoDuracion(l.duracion_seg || 0)}`,
+                rechazada: `${tipo} rechazada`,
+                cancelada: `${tipo} cancelada`,
+                perdida: `${tipo} perdida`
+            };
+            await registrarMensajeLlamada(llamada.conversacion_id, llamada.emisor_id, llamada.id, textos[estadoFinal]);
+            return true;
+        };
+
+        const llamadaActiva = async (conversacionId) => {
+            const [[l]] = await db.query(
+                `SELECT * FROM llamadas
+                 WHERE conversacion_id = ? AND estado IN ('sonando','en_curso')
+                 ORDER BY id DESC LIMIT 1`,
+                [conversacionId]
+            );
+            return l || null;
+        };
+
         // A inicia la llamada
         socket.on('llamar', async ({ conversacionId, esVideo } = {}, ack) => {
             try {
-                const conv = await obtenerConversacionDe(conversacionId, yoId); if (!conv) return ack?.({ ok: false, error: 'Sin acceso' }); if (conv.activa !== 1) return ack?.({ ok: false, error: 'Conversación cerrada' }); const [[yo]] = await db.query('SELECT nombre FROM usuarios WHERE id = ?', [yoId]); const datosLlamada = { conversacionId, esVideo: !!esVideo, deId: yoId, deNombre: yo?.nombre || 'Usuario' }; // 1. Avisar a su sala personal (para cuando está en la app fuera del chat) io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', datosLlamada); // 2. ¡Y avisar también a la sala de la conversación! (Para cuando está dentro del chat viendo los mensajes) io.to(`conv:${conversacionId}`).emit('llamada_entrante', datosLlamada); ack?.({ ok: true }); } catch (e) { console.error('Error en llamar:', e); ack?.({ ok: false, error: 'Error interno' }); } });
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
+                if (!conv) return ack?.({ ok: false, error: 'Sin acceso' });
+                if (conv.activa !== 1) return ack?.({ ok: false, error: 'Conversación cerrada' });
+
+                // Si quedó una llamada colgada, se cierra como perdida antes de crear otra
+                const vieja = await llamadaActiva(conversacionId);
+                if (vieja) await cerrarLlamada(vieja, 'perdida');
+
+                const [r] = await db.query(
+                    'INSERT INTO llamadas (conversacion_id, emisor_id, es_video) VALUES (?, ?, ?)',
+                    [conversacionId, yoId, esVideo ? 1 : 0]
+                );
+                const [[yo]] = await db.query('SELECT nombre FROM usuarios WHERE id = ?', [yoId]);
+
+                // Un solo aviso a la sala personal del otro: llega en cualquier pantalla
+                io.to(`user:${otroDe(conv)}`).emit('llamada_entrante', {
+                    conversacionId,
+                    esVideo: !!esVideo,
+                    deId: yoId,
+                    deNombre: yo?.nombre || 'Usuario',
+                    llamadaId: r.insertId
+                });
+
+                // Si nadie contesta en 45 s, queda como perdida
+                const destinoId = otroDe(conv);
+                setTimeout(async () => {
+                    try {
+                        const l = await llamadaActiva(conversacionId);
+                        if (l && l.id === r.insertId && l.estado === 'sonando') {
+                            await cerrarLlamada(l, 'perdida');
+                            io.to(`user:${destinoId}`).emit('llamada_cancelada', { conversacionId });
+                            io.to(`user:${yoId}`).emit('llamada_respondida', { conversacionId, aceptada: false });
+                        }
+                    } catch (e) { console.error('Timeout de llamada:', e); }
+                }, 45000);
+
+                ack?.({ ok: true, llamadaId: r.insertId });
+            } catch (e) {
+                console.error('Error en llamar:', e);
+                ack?.({ ok: false, error: 'Error interno' });
+            }
+        });
 
         // B acepta o rechaza
         socket.on('responder_llamada', async ({ conversacionId, aceptar } = {}) => {
             try {
                 const conv = await obtenerConversacionDe(conversacionId, yoId);
                 if (!conv) return;
+                const l = await llamadaActiva(conversacionId);
+                if (!l || l.emisor_id === yoId || l.estado !== 'sonando') return;
+
+                if (aceptar) {
+                    await db.query(
+                        `UPDATE llamadas SET estado = 'en_curso', contestada_en = NOW() WHERE id = ?`,
+                        [l.id]
+                    );
+                } else {
+                    await cerrarLlamada(l, 'rechazada');
+                }
                 io.to(`user:${otroDe(conv)}`).emit('llamada_respondida', {
                     conversacionId,
                     aceptada: !!aceptar
@@ -207,9 +319,25 @@ module.exports = (io) => {
             try {
                 const conv = await obtenerConversacionDe(conversacionId, yoId);
                 if (!conv) return;
+                const l = await llamadaActiva(conversacionId);
+                if (!l || l.estado !== 'sonando') return;
+                await cerrarLlamada(l, 'cancelada');
                 io.to(`user:${otroDe(conv)}`).emit('llamada_cancelada', { conversacionId });
             } catch (e) {
                 console.error('Error en cancelar_llamada:', e);
+            }
+        });
+
+        // Cualquiera cuelga durante la llamada
+        socket.on('finalizar_llamada', async ({ conversacionId } = {}) => {
+            try {
+                const conv = await obtenerConversacionDe(conversacionId, yoId);
+                if (!conv) return;
+                const l = await llamadaActiva(conversacionId);
+                if (!l || l.estado !== 'en_curso') return;
+                await cerrarLlamada(l, 'completada');
+            } catch (e) {
+                console.error('Error en finalizar_llamada:', e);
             }
         });
     });

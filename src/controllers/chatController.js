@@ -99,4 +99,26 @@ const eliminarConversacion = async (req, res) => {
     }
 };
 
-module.exports = { obtenerConversacionDe, listarConversaciones, obtenerMensajes, marcarLeidos, eliminarConversacion };
+const listarLlamadas = async (req, res) => {
+    try {
+        const yo = req.usuario.id;
+        const [rows] = await db.query(
+            `SELECT l.id, l.conversacion_id, l.emisor_id, l.es_video, l.estado,
+                    l.iniciada_en, l.duracion_seg,
+                    u.nombre AS otro_nombre
+             FROM llamadas l
+             JOIN conversaciones c ON c.id = l.conversacion_id
+             JOIN usuarios u ON u.id = IF(c.cliente_id = ?, c.tecnico_id, c.cliente_id)
+             WHERE (c.cliente_id = ? OR c.tecnico_id = ?) AND l.estado <> 'sonando'
+             ORDER BY l.iniciada_en DESC
+             LIMIT 100`,
+            [yo, yo, yo]
+        );
+        return res.json(rows);
+    } catch (error) {
+        console.error('Error al listar llamadas:', error);
+        return res.status(500).json({ mensaje: 'Error interno al listar llamadas' });
+    }
+};
+
+module.exports = { obtenerConversacionDe, listarLlamadas, listarConversaciones, obtenerMensajes, marcarLeidos, eliminarConversacion };
