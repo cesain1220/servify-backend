@@ -396,3 +396,23 @@ exports.eliminarCuenta = async (req, res) => {
         return res.status(500).json({ mensaje: 'Error interno al procesar la eliminación de la cuenta' });
     }
 };
+
+exports.obtenerResenasTecnico = async (req, res) => {
+    try {
+        const tecnicoId = req.usuario.id;
+
+        const query = `
+            SELECT r.id, r.calificacion, r.comentario, r.creado_en, u.nombre AS nombre_cliente
+            FROM resenas r
+            JOIN usuarios u ON r.autor_id = u.id
+            WHERE r.destinatario_id = ?
+            ORDER BY r.creado_en DESC
+        `;
+
+        const [resenas] = await db.query(query, [tecnicoId]);
+        return res.status(200).json(resenas);
+    } catch (error) {
+        console.error("Error al obtener reseñas del técnico:", error);
+        return res.status(500).json({ mensaje: "Error al obtener las reseñas" });
+    }
+};
