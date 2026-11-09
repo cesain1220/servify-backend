@@ -120,11 +120,4 @@ const listarLlamadas = async (req, res) => {
     }
 };
 
-module.exports = {
-    obtenerConversacionDe,
-    listarLlamadas,
-    listarConversaciones,
-    obtenerMensajes,
-    marcarLeidos,
-    eliminarConversacion
-};
+module.exports = { obtenerConversacionDe, listarLlamadas, listarConversaciones, obtenerMensajes, marcarLeidos, eliminarConversacion };

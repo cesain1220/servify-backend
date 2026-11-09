@@ -286,6 +286,7 @@ module.exports = (io) => {
         });
 
         // B acepta o rechaza
+        // B acepta o rechaza
         socket.on('responder_llamada', async ({ conversacionId, aceptar } = {}) => {
             try {
                 const conv = await obtenerConversacionDe(conversacionId, yoId);
@@ -301,10 +302,21 @@ module.exports = (io) => {
                 } else {
                     await cerrarLlamada(l, 'rechazada');
                 }
-                io.to(`user:${otroDe(conv)}`).emit('llamada_respondida', {
+
+                // --- CORRECCIÓN: Avisar tanto al emisor como al receptor que la llamada fue respondida ---
+                const emisorId = l.emisor_id;
+                const receptorId = yoId;
+
+                io.to(`user:${emisorId}`).emit('llamada_respondida', {
                     conversacionId,
                     aceptada: !!aceptar
                 });
+
+                io.to(`user:${receptorId}`).emit('llamada_respondida', {
+                    conversacionId,
+                    aceptada: !!aceptar
+                });
+
             } catch (e) {
                 console.error('Error en responder_llamada:', e);
             }
