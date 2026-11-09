@@ -10,7 +10,7 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         if (file.mimetype.startsWith('image/')) cb(null, true);
-        else cb(new Error('Solo se permiten im·genes'));
+        else cb(new Error('Solo se permiten im√°genes'));
     }
 });
 
@@ -26,21 +26,25 @@ router.get('/perfil', verificarToken, userController.obtenerPerfil);
 router.put('/perfil', verificarToken, userController.actualizarPerfil);
 router.delete('/perfil/eliminar', verificarToken, userController.eliminarCuenta);
 
+// Membres√≠as / Suscripciones (DEBE IR ANTES DE /:id)
+router.post('/membresia/suscribir', verificarToken, userController.suscribirsePlan);
+router.post('/membresia/cancelar', verificarToken, userController.cancelarPlan);
+
 // Lista de profesionales
 router.get('/profesionales', userController.getProfesionales);
 
-// Portafolio (ANTES de '/:id', si no Express lo toma como un id)
+// Portafolio (ANTES de '/:id')
 router.get('/portafolio', verificarToken, userController.obtenerPortafolio);
 router.post('/portafolio', verificarToken, recibirFoto, userController.subirFotoPortafolio);
 router.delete('/portafolio/:fotoId', verificarToken, userController.eliminarFotoPortafolio);
 
-// --- COLOCA ESTA RUTA ANTES DE '/:id' PARA QUE EXPRESS NO LA CONFUNDA CON UN PAR¡METRO ---
+// Rese√±as del usuario (ANTES de '/:id')
 router.get('/resenas', verificarToken, userController.obtenerResenasUsuario);
 
 // Detalle individual
 router.get('/:id', userController.getUserProfile);
 
-// Estado VIP
+// Estado VIP manual
 router.put('/:id/vip', verificarToken, userController.cambiarEstadoVip);
 
 module.exports = router;

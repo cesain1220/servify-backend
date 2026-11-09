@@ -19,6 +19,8 @@ exports.obtenerPerfil = async (req, res) => {
                 u.latitud, 
                 u.longitud, 
                 u.es_vip, 
+                u.tipo_plan,
+                u.fecha_vencimiento_vip,
                 u.calificacion_promedio, 
                 u.biografia, 
                 u.anos_experiencia,
@@ -66,9 +68,14 @@ exports.actualizarPerfil = async (req, res) => {
                  biografia = COALESCE(?, biografia),
                  anos_experiencia = COALESCE(?, anos_experiencia)
              WHERE id = ?`,
-            [nombre.trim(), telefono || null, direccion_texto || null,
-            biografia != null ? biografia.trim() : null,
-            anos_experiencia ?? null, usuarioId]
+            [
+                nombre.trim(), 
+                telefono || null, 
+                direccion_texto || null,
+                biografia != null ? biografia.trim() : null,
+                anos_experiencia ?? null, 
+                usuarioId
+            ]
         );
 
         return res.status(200).json({ mensaje: 'Perfil actualizado exitosamente' });
@@ -78,7 +85,7 @@ exports.actualizarPerfil = async (req, res) => {
     }
 };
 
-// OBTENER TODOS LOS PROFESIONALES (CONSULTA DINÁMICA CON CATEGORÍA)
+// OBTENER TODOS LOS PROFESIONALES (CONSULTA DINÁMICA CON CATEGORÍA Y ORDEN TRANSPARENTE)
 exports.getProfesionales = async (req, res) => {
     try {
         const [rows] = await db.query(
@@ -91,13 +98,19 @@ exports.getProfesionales = async (req, res) => {
                 u.latitud,
                 u.longitud,
                 u.rol,
+                u.es_vip AS esVip,
+                u.tipo_plan AS tipoPlan,
                 COALESCE(c.nombre, 'Técnico Especialista') AS oficio,
                 COALESCE(c.nombre, 'Técnico Especialista') AS especialidad,
                 c.id AS categoriaId
              FROM usuarios u
              LEFT JOIN tecnico_categorias tc ON u.id = tc.usuario_id
              LEFT JOIN categorias c ON tc.categoria_id = c.id
-             WHERE LOWER(u.rol) IN ('tecnico', 'profesional', 'ambos')`
+             WHERE LOWER(u.rol) IN ('tecnico', 'profesional', 'ambos', 'trabajador')
+             ORDER BY 
+                (u.es_vip = 1 AND COALESCE(u.calificacion_promedio, 5.0) >= 4.0) DESC,
+                calificacionPromedio DESC,
+                u.es_vip DESC`
         );
 
         const profesionales = rows.map(usuario => ({
@@ -110,6 +123,8 @@ exports.getProfesionales = async (req, res) => {
             calificacionPromedio: Number(usuario.calificacionPromedio),
             totalResenas: 0,
             biografia: usuario.biografia,
+            esVip: Number(usuario.esVip) || 0,
+            tipoPlan: usuario.tipoPlan || null,
             latitud: usuario.latitud !== null ? Number(usuario.latitud) : null,
             longitud: usuario.longitud !== null ? Number(usuario.longitud) : null
         }));
@@ -134,6 +149,7 @@ exports.getUserProfile = async (req, res) => {
                 COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
                 COALESCE(u.calificacion_promedio, 0) AS calificacionPromedio,
                 u.es_vip AS esVip,
+                u.tipo_plan AS tipoPlan,
                 u.latitud,
                 u.longitud,
                 u.rol,
@@ -170,7 +186,7 @@ exports.getUserProfile = async (req, res) => {
             [id]
         );
 
-        // Reseñas: si la tabla tiene otras columnas, no rompe el perfil
+        // Reseñas
         let totalResenas = 0;
         let promedio = Number(usuario.calificacionPromedio);
         try {
@@ -204,8 +220,7 @@ exports.getUserProfile = async (req, res) => {
             }));
         } catch (e) {
             console.log('Aviso: no se pudieron leer las reseñas:', e.message);
-        }
-
+    s        }
 
         return res.json({
             id: Number(usuario.id),
@@ -219,6 +234,7 @@ exports.getUserProfile = async (req, res) => {
             resenas,
             biografia: usuario.biografia,
             esVip: Number(usuario.esVip) || 0,
+            tipoPlan: usuario.tipoPlan || null,
             trabajosCompletados: Number(completados),
             especialidades: esp.map(e => e.nombre),
             latitud: usuario.latitud !== null ? Number(usuario.latitud) : null,
@@ -230,7 +246,7 @@ exports.getUserProfile = async (req, res) => {
     }
 };
 
-// Cambiar estado VIP
+// Cambiar estado VIP (Manual)
 exports.cambiarEstadoVip = async (req, res) => {
     try {
         const { id } = req.params;
@@ -252,7 +268,89 @@ exports.cambiarEstadoVip = async (req, res) => {
 };
 
 // ========================================================
-// 2. PORTAFOLIO DE TRABAJOS (EXCLUSIVO TÉCNICOS)
+// MEMBRESÍAS Y PLANES (ESTÁNDAR Y VIP)
+// ========================================================
+
+// POST: Suscribirse a un plan
+exports.suscribirsePlan = async (req, res) => {
+    try {
+        const usuarioId = req.usuario.id;
+        const { monto, tipoPlan, metodoPago } = req.body;
+
+        if (!usuarioId) {
+            return res.status(401).json({ mensaje: "Usuario no autenticado" });
+        }
+
+        const planTexto = (tipoPlan || "").toUpperCase();
+        const esVip = (planTexto.includes("VIP") || planTexto.includes("PRO")) ? 1 : 0;
+
+        const fechaInicio = new Date();
+        const fechaFin = new Date();
+        fechaFin.setDate(fechaFin.getDate() + 30);
+
+        const transaccionId = `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+        // 1. Actualizar datos en tabla usuarios
+        await db.query(
+            `UPDATE usuarios 
+             SET es_vip = ?, tipo_plan = ?, fecha_vencimiento_vip = ? 
+             WHERE id = ?`,
+            [esVip, tipoPlan, fechaFin, usuarioId]
+        );
+
+        // 2. Registrar en tabla suscripciones_vip
+        await db.query(
+            `INSERT INTO suscripciones_vip 
+             (usuario_id, monto, transaccion_id, fecha_inicio, fecha_fin, estado, tipo_plan, metodo_pago) 
+             VALUES (?, ?, ?, ?, ?, 'ACTIVA', ?, ?)`,
+            [usuarioId, monto || 0.00, transaccionId, fechaInicio, fechaFin, tipoPlan || "Plan", metodoPago || "Tarjeta"]
+        );
+
+        return res.status(200).json({
+            mensaje: "Suscripción activada con éxito",
+            esVip: esVip,
+            tipoPlan: tipoPlan,
+            fechaFin: fechaFin,
+            transaccionId: transaccionId
+        });
+    } catch (error) {
+        console.error("Error al suscribirse al plan:", error);
+        return res.status(500).json({ mensaje: "Error al procesar la suscripción" });
+    }
+};
+
+// POST: Cancelar membresía
+exports.cancelarPlan = async (req, res) => {
+    try {
+        const usuarioId = req.usuario.id;
+
+        if (!usuarioId) {
+            return res.status(401).json({ mensaje: "Usuario no autenticado" });
+        }
+
+        await db.query(
+            `UPDATE usuarios 
+             SET es_vip = 0, tipo_plan = NULL, fecha_vencimiento_vip = NULL 
+             WHERE id = ?`,
+            [usuarioId]
+        );
+
+        await db.query(
+            `UPDATE suscripciones_vip 
+             SET estado = 'CANCELADA' 
+             WHERE usuario_id = ? AND estado = 'ACTIVA'`,
+            [usuarioId]
+        );
+
+        return res.status(200).json({ mensaje: "Suscripción cancelada con éxito" });
+    } catch (error) {
+        console.error("Error al cancelar membresía:", error);
+        return res.status(500).json({ mensaje: "Error al cancelar la suscripción" });
+    }
+};
+
+// ========================================================
+// PORTAFOLIO DE TRABAJOS (EXCLUSIVO TÉCNICOS)
 // ========================================================
 
 // GET: Obtener todas las fotos del portafolio del técnico
@@ -327,12 +425,10 @@ exports.eliminarFotoPortafolio = async (req, res) => {
     }
 };
 
-
 // ========================================================
-// 3. ELIMINAR CUENTA (CLIENTE Y TÉCNICO) - Requerido Google Play
+// ELIMINAR CUENTA (CLIENTE Y TÉCNICO)
 // ========================================================
 
-// DELETE: Eliminar cuenta por completo y todos sus datos/archivos asociados
 exports.eliminarCuenta = async (req, res) => {
     try {
         const usuarioId = req.usuario.id;
@@ -362,7 +458,7 @@ exports.eliminarCuenta = async (req, res) => {
                     }
                 });
             } catch (errorDb) {
-                console.log('Aviso: Omisión del borrado físico del portafolio (la tabla aún no existe):', errorDb.message);
+                console.log('Aviso: Omisión del borrado físico del portafolio:', errorDb.message);
             }
         }
 
@@ -397,13 +493,14 @@ exports.eliminarCuenta = async (req, res) => {
     }
 };
 
+// GET: Obtener reseñas del usuario
 exports.obtenerResenasUsuario = async (req, res) => {
     try {
-        const usuarioId = req.usuario.id; // Funciona tanto si es cliente como técnico
+        const usuarioId = req.usuario.id;
 
         const query = `
             SELECT r.id, r.autor_id, r.destinatario_id, r.calificacion, r.comentario, r.creado_en,
-       u.nombre AS nombre_cliente
+                   u.nombre AS nombre_cliente
             FROM resenas r
             JOIN usuarios u ON r.autor_id = u.id
             WHERE r.destinatario_id = ?
