@@ -92,6 +92,7 @@ const listarPostulacionesDeSolicitud = async (req, res) => {
     }
 };
 
+
 // ---------- CLIENTE: aceptar (abre el chat) ----------
 const aceptarPostulacion = async (req, res) => {
     const conn = await abrirConexion();
@@ -114,7 +115,12 @@ const aceptarPostulacion = async (req, res) => {
         if (post.estado !== 'pendiente') throw fallo(409, 'Esta propuesta ya no está disponible');
 
         await conn.query("UPDATE postulaciones SET estado = 'aceptada' WHERE id = ?", [post.id]);
-        await conn.query("UPDATE solicitudes SET estado = 'en_proceso' WHERE id = ?", [sol.id]);
+
+       
+        await conn.query(
+            "UPDATE solicitudes SET estado = 'en_proceso', tecnico_id = ? WHERE id = ?",
+            [post.tecnico_id, sol.id]
+        );
 
         // Crea el chat; si ya existía (caso raro), lo reactiva
         await conn.query(
