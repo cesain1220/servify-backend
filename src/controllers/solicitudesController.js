@@ -361,13 +361,33 @@ const validarQr = async (req, res) => {
 };
 
 const crearResena = async (req, res) => {
-    const { autor_id, destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario } = req.body;
+    // 1. Tomamos el autor del token de autenticación (req.usuario.id), NO del body por seguridad
+    const autor_id = req.usuario.id;
+    let { destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario } = req.body;
 
-    if (!autor_id || !destinatario_id || !calificacion) {
-        return res.status(400).json({ ok: false, mensaje: 'autor_id, destinatario_id y calificacion son obligatorios' });
+    if (!calificacion) {
+        return res.status(400).json({ ok: false, mensaje: 'La calificación es obligatoria' });
     }
 
     try {
+        // 2. SEGURIDAD EXTRA: Si viene un solicitud_id pero el destinatario_id viene mal o es 1 por error,
+        // lo averiguamos directamente de la base de datos consultando de quién es la solicitud o quién la aceptó.
+        if (solicitud_id && (!destinatario_id || destinatario_id == 1)) {
+            const [[solicitud]] = await db.query(
+                'SELECT cliente_id, tecnico_id FROM solicitudes WHERE id = ?',
+                [solicitud_id]
+            );
+            if (solicitud) {
+                // Si el que escribe la reseña es el cliente, el destinatario debe ser el técnico. 
+                // Si el que escribe es el técnico, el destinatario debe ser el cliente.
+                destinatario_id = (autor_id === solicitud.cliente_id) ? solicitud.tecnico_id : solicitud.cliente_id;
+            }
+        }
+
+        if (!destinatario_id) {
+            return res.status(400).json({ ok: false, mensaje: 'No se pudo determinar el destinatario de la reseña' });
+        }
+
         await db.query(
             `INSERT INTO resenas (autor_id, destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario)
              VALUES (?, ?, ?, ?, ?, ?)`,
