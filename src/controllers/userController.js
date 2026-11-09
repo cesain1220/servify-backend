@@ -282,11 +282,19 @@ exports.suscribirsePlan = async (req, res) => {
         }
 
         const planTexto = (tipoPlan || "").toUpperCase();
-        const esVip = (planTexto.includes("VIP") || planTexto.includes("PRO")) ? 1 : 0;
+
+        // CORRECCIÓN AQUÍ: Permitimos que reconozca PRO, VIP o SEMANAL como planes activos (es_vip = 1)
+        const esVip = (planTexto.includes("VIP") || planTexto.includes("PRO") || planTexto.includes("SEMANAL")) ? 1 : 0;
 
         const fechaInicio = new Date();
         const fechaFin = new Date();
-        fechaFin.setDate(fechaFin.getDate() + 30);
+
+        // Si es semanal le podemos dar 7 días, o 30 si es mensual (opcional, por si quieres afinar la fecha fin)
+        if (planTexto.includes("SEMANAL")) {
+            fechaFin.setDate(fechaFin.getDate() + 7);
+        } else {
+            fechaFin.setDate(fechaFin.getDate() + 30);
+        }
 
         const transaccionId = `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
