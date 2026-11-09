@@ -361,26 +361,26 @@ const validarQr = async (req, res) => {
 };
 
 const crearResena = async (req, res) => {
-    // 1. Tomamos el autor del token de autenticación (req.usuario.id), NO del body por seguridad
-    const autor_id = req.usuario.id;
-    let { destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario } = req.body;
+    let { autor_id, destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario } = req.body;
 
-    if (!calificacion) {
-        return res.status(400).json({ ok: false, mensaje: 'La calificación es obligatoria' });
+    // Si el autor no viene en el body, lo sacamos del token de sesión (req.usuario)
+    if (!autor_id && req.usuario) {
+        autor_id = req.usuario.id;
+    }
+
+    if (!autor_id || !calificacion) {
+        return res.status(400).json({ ok: false, mensaje: 'autor_id y calificacion son obligatorios' });
     }
 
     try {
-        // 2. SEGURIDAD EXTRA: Si viene un solicitud_id pero el destinatario_id viene mal o es 1 por error,
-        // lo averiguamos directamente de la base de datos consultando de quién es la solicitud o quién la aceptó.
-        if (solicitud_id && (!destinatario_id || destinatario_id == 1)) {
+        // Si no viene destinatario_id pero viene solicitud_id, lo averiguamos de la base de datos
+        if (!destinatario_id && solicitud_id) {
             const [[solicitud]] = await db.query(
                 'SELECT cliente_id, tecnico_id FROM solicitudes WHERE id = ?',
                 [solicitud_id]
             );
             if (solicitud) {
-                // Si el que escribe la reseña es el cliente, el destinatario debe ser el técnico. 
-                // Si el que escribe es el técnico, el destinatario debe ser el cliente.
-                destinatario_id = (autor_id === solicitud.cliente_id) ? solicitud.tecnico_id : solicitud.cliente_id;
+                destinatario_id = (Number(autor_id) === Number(solicitud.cliente_id)) ? solicitud.tecnico_id : solicitud.cliente_id;
             }
         }
 
@@ -404,7 +404,7 @@ const crearResena = async (req, res) => {
         return res.json({ ok: true, mensaje: 'Reseña registrada con éxito' });
     } catch (error) {
         console.error('Error al crear reseña:', error);
-        return res.status(500).json({ ok: false, error: 'Error al registrar reseña' });
+        return res.status(500).json({ ok: false, error: 'Error al registrar reseña', detalle: error.message });
     }
 };
 
