@@ -363,7 +363,6 @@ const validarQr = async (req, res) => {
 const crearResena = async (req, res) => {
     let { autor_id, destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario } = req.body;
 
-    // Si el autor no viene en el body, lo sacamos del token de sesión (req.usuario)
     if (!autor_id && req.usuario) {
         autor_id = req.usuario.id;
     }
@@ -373,20 +372,53 @@ const crearResena = async (req, res) => {
     }
 
     try {
-        // Si no viene destinatario_id pero viene solicitud_id, lo averiguamos de la base de datos
-        if (!destinatario_id && solicitud_id) {
+        // 🔥 BÚSQUEDA ROBUSTA: Si hay solicitud_id, averiguamos los involucrados
+        if (solicitud_id) {
+            // 1. Buscamos la solicitud para conocer al cliente
             const [[solicitud]] = await db.query(
                 'SELECT cliente_id, tecnico_id FROM solicitudes WHERE id = ?',
                 [solicitud_id]
             );
+
             if (solicitud) {
-                destinatario_id = (Number(autor_id) === Number(solicitud.cliente_id)) ? solicitud.tecnico_id : solicitud.cliente_id;
+                let tecnicoReal = solicitud.tecnico_id;
+
+                // 2. Si el tecnico_id de la solicitud está en NULL, lo buscamos en las postulaciones aceptadas
+                if (!tecnicoReal) {
+                    const [[postulacionAceptada]] = await db.query(
+                        "SELECT tecnico_id FROM postulaciones WHERE solicitud_id = ? AND estado = 'aceptada' LIMIT 1",
+                        [solicitud_id]
+                    );
+                    if (postulacionAceptada) {
+                        tecnicoReal = postulacionAceptada.tecnico_id;
+                    }
+                }
+
+                // 3. Definimos quién es el destinatario según quién escriba la reseña
+                if (Number(autor_id) === Number(solicitud.cliente_id)) {
+                    destinatario_id = tecnicoReal; // Si escribe el cliente, va para el técnico
+                } else {
+                    destinatario_id = solicitud.cliente_id; // Si escribe el técnico, va para el cliente
+                }
+            }
+        }
+
+        // Si viene de una contratación directa
+        if (contratacion_directa_id && !destinatario_id) {
+            const [[directa]] = await db.query(
+                'SELECT cliente_id, tecnico_id FROM contrataciones_directas WHERE id = ?',
+                [contratacion_directa_id]
+            );
+            if (directa) {
+                destinatario_id = (Number(autor_id) === Number(directa.cliente_id)) ? directa.tecnico_id : directa.cliente_id;
             }
         }
 
         if (!destinatario_id) {
             return res.status(400).json({ ok: false, mensaje: 'No se pudo determinar el destinatario de la reseña' });
         }
+
+        console.log(`[CREAR RESENA EXITO] Autor: ${autor_id} -> Destinatario Final: ${destinatario_id}`);
 
         await db.query(
             `INSERT INTO resenas (autor_id, destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario)
