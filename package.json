@@ -23,7 +23,8 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.5.0",
     "mysql2": "^3.24.4",
-    "socket.io": "^4.8.4"
+    "socket.io": "^4.8.4",
+    "stripe": "^23.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

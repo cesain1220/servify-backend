@@ -12,13 +12,23 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const solicitudesRoutes = require('./routes/solicitudesRoutes');
 const chatRoutes = require('./routes/chatRoutes');
-const adminRoutes = require('./routes/adminRoutes'); // <-- Importado aquí arriba
+const adminRoutes = require('./routes/adminRoutes');
+const pagosRoutes = require('./routes/pagosRoutes');
+const { stripeWebhook } = require('./controllers/pagosController');
 const registrarChatSocket = require('./chatSocket');
 
 const app = express();
 
 // Middlewares
 app.use(cors());
+
+// Webhook oficial de Stripe (DEBE ir antes de express.json() para leer el raw body)
+app.post(
+    '/api/pagos/webhook',
+    express.raw({ type: 'application/json' }),
+    stripeWebhook
+);
+
 app.use(express.json());
 
 // Endpoint de prueba de salud / conexión
@@ -43,11 +53,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/solicitudes', solicitudesRoutes);
 app.use('/api/chat', chatRoutes);
-app.use('/api/admin', adminRoutes); // <-- Registrado aquí antes del servidor
+app.use('/api/admin', adminRoutes);
+app.use('/api/pagos', pagosRoutes);
 
 // Servidor HTTP + Socket.IO
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
+app.set('io', io);
 registrarChatSocket(io);
 
 const PORT = process.env.PORT || 3000;
