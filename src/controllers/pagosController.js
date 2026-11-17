@@ -43,7 +43,7 @@ const crearPaymentSheet = async (req, res) => {
             return res.status(400).json({ ok: false, mensaje: 'El monto debe ser mayor a 0' });
         }
 
-        // Si Android no envió tecnico_id, lo obtenemos de solicitudes o contrataciones_directas
+        // Resolver tecnico_id automáticamente desde la BD si no vino en el body
         if (tipo === 'servicio' && !tecnico_id) {
             if (solicitud_id) {
                 const [solRows] = await db.query(
@@ -52,6 +52,19 @@ const crearPaymentSheet = async (req, res) => {
                 );
                 if (solRows.length && solRows[0].tecnico_id) {
                     tecnico_id = solRows[0].tecnico_id;
+                } else {
+                    // Fallback: buscar si hay una cotización aceptada para esa solicitud
+                    try {
+                        const [cotRows] = await db.query(
+                            `SELECT tecnico_id FROM cotizaciones WHERE solicitud_id = ? AND estado = 'aceptada' LIMIT 1`,
+                            [solicitud_id]
+                        );
+                        if (cotRows.length && cotRows[0].tecnico_id) {
+                            tecnico_id = cotRows[0].tecnico_id;
+                        }
+                    } catch (_) {
+                        // Ignorar si la tabla/columna tiene otro nombre
+                    }
                 }
             } else if (contratacion_directa_id) {
                 const [cdRows] = await db.query(
@@ -89,8 +102,8 @@ const crearPaymentSheet = async (req, res) => {
             }
         });
 
-        // Registrar intención en pagos_servicios siempre que sea servicio
-        if (tipo === 'servicio') {
+        // Solo insertar en pagos_servicios si tenemos tecnico_id válido (columna NOT NULL)
+        if (tipo === 'servicio' && tecnico_id) {
             const montoNum = Number(monto);
             const comision = Number((montoNum * 0.10).toFixed(2));
             const netoTecnico = Number((montoNum - comision).toFixed(2));
