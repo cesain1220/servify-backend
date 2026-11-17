@@ -56,6 +56,7 @@ const obtenerSolicitudes = async (req, res) => {
         const [rows] = await db.query(
             `SELECT s.id, s.cliente_id, u.nombre AS cliente_nombre,
                     c.nombre AS categoria_nombre, s.titulo, s.descripcion,
+                    u.foto_url AS cliente_foto,
                     s.presupuesto_estimado, s.creado_en,
                     s.latitud, s.longitud,
                     ${tieneUbicacion ? SQL_DISTANCIA : 'NULL'} AS distancia_km
@@ -146,6 +147,7 @@ const obtenerSolicitudPorId = async (req, res) => {
         const [rows] = await db.query(
             `SELECT s.id, s.cliente_id, u.nombre AS cliente_nombre,
                     u.creado_en AS cliente_creado_en,
+                    u.foto_url AS cliente_foto,
                     (SELECT COALESCE(AVG(calificacion), 0) FROM resenas WHERE destinatario_id = u.id) AS cliente_calificacion,
                     (SELECT COUNT(*) FROM resenas WHERE destinatario_id = u.id) AS cliente_total_resenas,
                     c.nombre AS categoria_nombre, s.titulo, s.descripcion,

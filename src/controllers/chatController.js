@@ -18,6 +18,7 @@ const listarConversaciones = async (req, res) => {
         const [rows] = await db.query(
             `SELECT c.id, c.solicitud_id, c.activa,
                     s.titulo AS solicitud_titulo,
+                    u.foto_url AS otro_foto,
                     IF(c.cliente_id = ?, c.tecnico_id, c.cliente_id) AS otro_id,
                     u.nombre AS otro_nombre,
                     (SELECT m.contenido FROM mensajes m

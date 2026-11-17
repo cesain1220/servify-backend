@@ -25,6 +25,8 @@ const recibirFoto = (req, res, next) => {
 router.get('/perfil', verificarToken, userController.obtenerPerfil);
 router.put('/perfil', verificarToken, userController.actualizarPerfil);
 router.delete('/perfil/eliminar', verificarToken, userController.eliminarCuenta);
+router.post('/perfil/foto', verificarToken, recibirFoto, userController.subirFotoPerfil);
+
 
 // Membresías / Suscripciones (DEBE IR ANTES DE /:id)
 router.post('/membresia/suscribir', verificarToken, userController.suscribirsePlan);

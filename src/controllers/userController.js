@@ -97,6 +97,7 @@ exports.getProfesionales = async (req, res) => {
                 COALESCE(u.calificacion_promedio, 5.0) AS calificacionPromedio,
                 u.latitud,
                 u.longitud,
+                u.foto_url AS fotoUrl,
                 u.rol,
                 u.es_vip AS esVip,
                 u.tipo_plan AS tipoPlan,
@@ -126,7 +127,8 @@ exports.getProfesionales = async (req, res) => {
             esVip: Number(usuario.esVip) || 0,
             tipoPlan: usuario.tipoPlan || null,
             latitud: usuario.latitud !== null ? Number(usuario.latitud) : null,
-            longitud: usuario.longitud !== null ? Number(usuario.longitud) : null
+            longitud: usuario.longitud !== null ? Number(usuario.longitud) : null, 
+            fotoUrl: usuario.fotoUrl
         }));
 
         return res.status(200).json(profesionales);
@@ -146,6 +148,7 @@ exports.getUserProfile = async (req, res) => {
                 u.id,
                 u.nombre AS nombreCompleto,
                 u.biografia,
+                u.foto_url AS fotoUrl,
                 COALESCE(u.anos_experiencia, 0) AS anosExperiencia,
                 COALESCE(u.calificacion_promedio, 0) AS calificacionPromedio,
                 u.es_vip AS esVip,
@@ -220,7 +223,7 @@ exports.getUserProfile = async (req, res) => {
             }));
         } catch (e) {
             console.log('Aviso: no se pudieron leer las reseñas:', e.message);
-    s        }
+            }
 
         return res.json({
             id: Number(usuario.id),
@@ -233,6 +236,7 @@ exports.getUserProfile = async (req, res) => {
             totalResenas,
             resenas,
             biografia: usuario.biografia,
+            fotoUrl: usuario.fotoUrl,
             esVip: Number(usuario.esVip) || 0,
             tipoPlan: usuario.tipoPlan || null,
             trabajosCompletados: Number(completados),
@@ -520,5 +524,49 @@ exports.obtenerResenasUsuario = async (req, res) => {
     } catch (error) {
         console.error("Error al obtener reseñas del usuario:", error);
         return res.status(500).json({ mensaje: "Error al obtener las reseñas" });
+    }
+};
+
+// POST: Subir o actualizar foto de perfil (con detección y recorte facial en Cloudinary)
+exports.subirFotoPerfil = async (req, res) => {
+    try {
+        const usuarioId = req.usuario.id;
+
+        if (!req.file) {
+            return res.status(400).json({ mensaje: 'No se envió ninguna imagen' });
+        }
+
+        // Subimos a Cloudinary aplicando enfoque automático en el rostro
+        const subida = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
+                {
+                    folder: 'servify/perfiles',
+                    resource_type: 'image',
+                    transformation: [
+                        { width: 512, height: 512, crop: 'fill', gravity: 'face' },
+                        { quality: 'auto', fetch_format: 'auto' }
+                    ]
+                },
+                (err, result) => (err ? reject(err) : resolve(result))
+            ).end(req.file.buffer);
+        });
+
+        // Actualizamos la columna foto_url en la tabla usuarios
+        await db.query(
+            'UPDATE usuarios SET foto_url = ? WHERE id = ?',
+            [subida.secure_url, usuarioId]
+        );
+
+        return res.status(200).json({
+            mensaje: 'Foto de perfil actualizada exitosamente',
+            foto_url: subida.secure_url
+        });
+
+    } catch (error) {
+        console.error('Error al subir foto de perfil:', error);
+        return res.status(500).json({
+            mensaje: 'Error al guardar la foto de perfil',
+            detalle: error.message
+        });
     }
 };

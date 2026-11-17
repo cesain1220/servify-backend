@@ -71,6 +71,7 @@ const listarPostulacionesDeSolicitud = async (req, res) => {
         const [rows] = await db.query(
             `SELECT p.id, p.solicitud_id, p.tecnico_id,
                     u.nombre AS tecnico_nombre,
+                    u.foto_url AS tecnico_foto,
                     u.calificacion_promedio AS tecnico_calificacion,
                     p.monto_propuesto, p.mensaje, p.estado, p.creado_en,
                     s.presupuesto_estimado,
