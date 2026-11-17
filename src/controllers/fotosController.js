@@ -12,7 +12,7 @@ const subirBuffer = (buffer) => new Promise((resolve, reject) => {
                 { width: 1280, height: 1280, crop: 'limit' },
                 { quality: 'auto', fetch_format: 'auto' }
             ]
-        },
+        }, 
         (err, result) => (err ? reject(err) : resolve(result))
     );
     stream.end(buffer);
