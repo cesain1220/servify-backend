@@ -56,7 +56,9 @@ const crearPaymentSheet = async (req, res) => {
             amount: montoCentavos,
             currency: 'usd',
             customer: customerId,
-            payment_method_types: ['card'],
+            automatic_payment_methods: {
+                enabled: true,
+            },
             metadata: {
                 tipo,
                 usuario_id: String(usuario_id),
