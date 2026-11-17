@@ -30,10 +30,10 @@ async function obtenerOCrearStripeCustomer(usuarioId) {
 // 1. Crear intención de pago con tarjeta (Protegido con authMiddleware)
 const crearPaymentSheet = async (req, res) => {
     try {
-        const usuario_id = req.usuario.id; // Extraído directo de tu authMiddleware
-        const {
-            tipo = 'servicio', // 'servicio' | 'vip'
-            monto,             // Monto en dólares, ej: 25.00
+        const usuario_id = req.usuario.id;
+        let {
+            tipo = 'servicio',
+            monto,
             solicitud_id = null,
             contratacion_directa_id = null,
             tecnico_id = null
@@ -43,11 +43,32 @@ const crearPaymentSheet = async (req, res) => {
             return res.status(400).json({ ok: false, mensaje: 'El monto debe ser mayor a 0' });
         }
 
+        // Si Android no envió tecnico_id, lo obtenemos de solicitudes o contrataciones_directas
+        if (tipo === 'servicio' && !tecnico_id) {
+            if (solicitud_id) {
+                const [solRows] = await db.query(
+                    'SELECT tecnico_id FROM solicitudes WHERE id = ?',
+                    [solicitud_id]
+                );
+                if (solRows.length && solRows[0].tecnico_id) {
+                    tecnico_id = solRows[0].tecnico_id;
+                }
+            } else if (contratacion_directa_id) {
+                const [cdRows] = await db.query(
+                    'SELECT tecnico_id FROM contrataciones_directas WHERE id = ?',
+                    [contratacion_directa_id]
+                );
+                if (cdRows.length && cdRows[0].tecnico_id) {
+                    tecnico_id = cdRows[0].tecnico_id;
+                }
+            }
+        }
+
         const customerId = await obtenerOCrearStripeCustomer(usuario_id);
 
         const ephemeralKey = await stripe.ephemeralKeys.create(
             { customer: customerId },
-            { apiVersion: '2024-06-20' }
+            { apiVersion: '2026-10-28.endive' }
         );
 
         const montoCentavos = Math.round(Number(monto) * 100);
@@ -68,10 +89,10 @@ const crearPaymentSheet = async (req, res) => {
             }
         });
 
-        // Registrar intención en pagos_servicios si es pago de servicio
-        if (tipo === 'servicio' && tecnico_id) {
+        // Registrar intención en pagos_servicios siempre que sea servicio
+        if (tipo === 'servicio') {
             const montoNum = Number(monto);
-            const comision = Number((montoNum * 0.10).toFixed(2)); // 10% comisión
+            const comision = Number((montoNum * 0.10).toFixed(2));
             const netoTecnico = Number((montoNum - comision).toFixed(2));
 
             await db.query(
