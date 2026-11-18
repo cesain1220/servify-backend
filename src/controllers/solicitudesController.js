@@ -374,9 +374,36 @@ const crearResena = async (req, res) => {
     }
 
     try {
-        // 🔥 BÚSQUEDA ROBUSTA: Si hay solicitud_id, averiguamos los involucrados
+        // 🌟 1. VALIDACIONES ANTIDOBLE CALIFICACIÓN
         if (solicitud_id) {
-            // 1. Buscamos la solicitud para conocer al cliente
+            const [resenaExistente] = await db.query(
+                'SELECT id FROM resenas WHERE autor_id = ? AND solicitud_id = ? LIMIT 1',
+                [autor_id, solicitud_id]
+            );
+            if (resenaExistente.length > 0) {
+                return res.status(400).json({
+                    ok: false,
+                    mensaje: 'Ya has calificado este servicio anteriormente.'
+                });
+            }
+        }
+
+        if (contratacion_directa_id) {
+            const [resenaExistenteCD] = await db.query(
+                'SELECT id FROM resenas WHERE autor_id = ? AND contratacion_directa_id = ? LIMIT 1',
+                [autor_id, contratacion_directa_id]
+            );
+            if (resenaExistenteCD.length > 0) {
+                return res.status(400).json({
+                    ok: false,
+                    mensaje: 'Ya has calificado esta contratación directa anteriormente.'
+                });
+            }
+        }
+
+        // 🔥 2. BÚSQUEDA ROBUSTA DE LOS INVOLUCRADOS
+        if (solicitud_id) {
+            // Buscamos la solicitud para conocer al cliente
             const [[solicitud]] = await db.query(
                 'SELECT cliente_id, tecnico_id FROM solicitudes WHERE id = ?',
                 [solicitud_id]
@@ -385,7 +412,7 @@ const crearResena = async (req, res) => {
             if (solicitud) {
                 let tecnicoReal = solicitud.tecnico_id;
 
-                // 2. Si el tecnico_id de la solicitud está en NULL, lo buscamos en las postulaciones aceptadas
+                // Si el tecnico_id de la solicitud está en NULL, lo buscamos en las postulaciones aceptadas
                 if (!tecnicoReal) {
                     const [[postulacionAceptada]] = await db.query(
                         "SELECT tecnico_id FROM postulaciones WHERE solicitud_id = ? AND estado = 'aceptada' LIMIT 1",
@@ -396,7 +423,7 @@ const crearResena = async (req, res) => {
                     }
                 }
 
-                // 3. Definimos quién es el destinatario según quién escriba la reseña
+                // Definimos quién es el destinatario según quién escriba la reseña
                 if (Number(autor_id) === Number(solicitud.cliente_id)) {
                     destinatario_id = tecnicoReal; // Si escribe el cliente, va para el técnico
                 } else {
