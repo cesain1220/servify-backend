@@ -363,10 +363,15 @@ const validarQr = async (req, res) => {
 };
 
 const crearResena = async (req, res) => {
-    let { autor_id, destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario } = req.body;
+    let autor_id = req.usuario?.id;
+    let { destinatario_id, solicitud_id, contratacion_directa_id, calificacion, comentario } = req.body;
 
-    if (!autor_id && req.usuario) {
-        autor_id = req.usuario.id;
+    if (!calificacion || calificacion < 1 || calificacion > 5) {
+        return res.status(400).json({ ok: false, mensaje: 'La calificación debe ser de 1 a 5' });
+    }
+
+    if (!autor_id && req.body.autor_id) {
+        autor_id = req.body.autor_id;
     }
 
     if (!autor_id || !calificacion) {
@@ -403,36 +408,34 @@ const crearResena = async (req, res) => {
 
         // 🔥 2. BÚSQUEDA ROBUSTA DE LOS INVOLUCRADOS
         if (solicitud_id) {
-            // Buscamos la solicitud para conocer al cliente
             const [[solicitud]] = await db.query(
-                'SELECT cliente_id, tecnico_id FROM solicitudes WHERE id = ?',
-                [solicitud_id]
+                'SELECT cliente_id, tecnico_id, estado FROM solicitudes WHERE id = ?', [solicitud_id]
             );
 
-            if (solicitud) {
-                let tecnicoReal = solicitud.tecnico_id;
+            if (!solicitud) return res.status(404).json({ ok: false, mensaje: 'Solicitud no encontrada' });
+            if (solicitud.estado !== 'completado') {
+                return res.status(409).json({ ok: false, mensaje: 'Solo puedes calificar trabajos completados' });
+            }
 
-                // Si el tecnico_id de la solicitud está en NULL, lo buscamos en las postulaciones aceptadas
-                if (!tecnicoReal) {
-                    const [[postulacionAceptada]] = await db.query(
-                        "SELECT tecnico_id FROM postulaciones WHERE solicitud_id = ? AND estado = 'aceptada' LIMIT 1",
-                        [solicitud_id]
-                    );
-                    if (postulacionAceptada) {
-                        tecnicoReal = postulacionAceptada.tecnico_id;
-                    }
-                }
+            let tecnicoReal = solicitud.tecnico_id;
 
-                // Definimos quién es el destinatario según quién escriba la reseña
-                if (Number(autor_id) === Number(solicitud.cliente_id)) {
-                    destinatario_id = tecnicoReal; // Si escribe el cliente, va para el técnico
-                } else {
-                    destinatario_id = solicitud.cliente_id; // Si escribe el técnico, va para el cliente
+            if (!tecnicoReal) {
+                const [[postulacionAceptada]] = await db.query(
+                    "SELECT tecnico_id FROM postulaciones WHERE solicitud_id = ? AND estado = 'aceptada' LIMIT 1",
+                    [solicitud_id]
+                );
+                if (postulacionAceptada) {
+                    tecnicoReal = postulacionAceptada.tecnico_id;
                 }
+            }
+
+            if (Number(autor_id) === Number(solicitud.cliente_id)) {
+                destinatario_id = tecnicoReal;
+            } else {
+                destinatario_id = solicitud.cliente_id;
             }
         }
 
-        // Si viene de una contratación directa
         if (contratacion_directa_id && !destinatario_id) {
             const [[directa]] = await db.query(
                 'SELECT cliente_id, tecnico_id FROM contrataciones_directas WHERE id = ?',
@@ -469,6 +472,24 @@ const crearResena = async (req, res) => {
     }
 };
 
+const obtenerMiResena = async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT calificacion, comentario FROM resenas
+             WHERE autor_id = ? AND solicitud_id = ? LIMIT 1`,
+            [req.usuario.id, req.params.id]
+        );
+        return res.json({
+            ya_califico: rows.length > 0,
+            calificacion: rows[0]?.calificacion ?? null,
+            comentario: rows[0]?.comentario ?? null
+        });
+    } catch (error) {
+        console.error('Error al obtener mi reseña:', error);
+        return res.status(500).json({ mensaje: 'Error al consultar la reseña' });
+    }
+};
+
 module.exports = {
     crearSolicitud,
     obtenerSolicitudes,
@@ -479,5 +500,6 @@ module.exports = {
     responderContratacion,
     iniciarCierre,
     validarQr,
-    crearResena
+    crearResena, 
+    obtenerMiResena
 };

@@ -11,7 +11,8 @@ const {
     responderContratacion,
     iniciarCierre,
     validarQr,
-    crearResena
+    crearResena, 
+    obtenerMiResena
 } = require('../controllers/solicitudesController');
 const { subirFotosSolicitud } = require('../controllers/fotosController');
 const authMiddleware = require('../middlewares/authMiddleware');
@@ -48,6 +49,7 @@ router.patch('/directas/:id/estado', authMiddleware, responderContratacion);
 router.post('/:id/iniciar-cierre', authMiddleware, iniciarCierre);
 router.post('/validar-qr', authMiddleware, validarQr);
 router.post('/resenas', authMiddleware, crearResena);
+router.get('/:id/mi-resena', authMiddleware, obtenerMiResena);
 
 // Nota: Esta ruta con parametro :id debe ir al final para no colisionar con /mias o /directas
 router.get('/:id', authMiddleware, obtenerSolicitudPorId);
