@@ -149,7 +149,6 @@ exports.cancelarSolicitudAdmin = async (req, res) => {
     const { motivo } = req.body;
     const razon = (motivo && motivo.trim()) ? motivo.trim() : 'Incumplimiento de normas de la comunidad';
 
-    // Buscamos la solicitud y el dueño antes de actualizar
     const [[solicitud]] = await db.query(
       'SELECT id, titulo, cliente_id, descripcion FROM solicitudes WHERE id = ?',
       [id]
@@ -161,12 +160,18 @@ exports.cancelarSolicitudAdmin = async (req, res) => {
 
     const nuevaDescripcion = `${solicitud.descripcion || ''}\n\n[Dada de baja por Administración — Motivo: ${razon}]`.trim();
 
-    await db.query(
-      'UPDATE solicitudes SET estado = "cancelada", descripcion = ? WHERE id = ?',
-      [nuevaDescripcion, id]
-    );
+    try {
+      await db.query(
+        'UPDATE solicitudes SET estado = "cancelado", descripcion = ? WHERE id = ?',
+        [nuevaDescripcion, id]
+      );
+    } catch (enumErr) {
+      await db.query(
+        'UPDATE solicitudes SET estado = "cancelada", descripcion = ? WHERE id = ?',
+        [nuevaDescripcion, id]
+      );
+    }
 
-    // Intentamos guardar notificación al usuario (si existe la tabla notificaciones)
     try {
       await db.query(
         `INSERT INTO notificaciones (usuario_id, titulo, mensaje, leida, creado_en)
@@ -183,10 +188,15 @@ exports.cancelarSolicitudAdmin = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      mensaje: 'Solicitud dada de baja y usuario notificado',
       message: 'Solicitud dada de baja y usuario notificado'
     });
   } catch (error) {
     console.error('Error al moderar solicitud:', error);
-    return res.status(500).json({ success: false, message: 'Error al dar de baja la solicitud' });
+    return res.status(500).json({
+      success: false,
+      mensaje: `Error al dar de baja: ${error.message}`,
+      message: `Error al dar de baja: ${error.message}`
+    });
   }
 };
