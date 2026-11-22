@@ -51,6 +51,8 @@ router.post('/validar-qr', authMiddleware, validarQr);
 router.post('/resenas', authMiddleware, crearResena);
 router.get('/:id/mi-resena', authMiddleware, obtenerMiResena);
 
+router.get('/ganancias', authMiddleware, obtenerGanancias);
+
 // Nota: Esta ruta con parametro :id debe ir al final para no colisionar con /mias o /directas
 router.get('/:id', authMiddleware, obtenerSolicitudPorId);
 

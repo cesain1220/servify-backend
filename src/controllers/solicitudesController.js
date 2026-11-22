@@ -327,6 +327,7 @@ const iniciarCierre = async (req, res) => {
 
 const validarQr = async (req, res) => {
     const { qr_token, tecnico_id } = req.body;
+    const tecnicoActual = req.usuario?.id || tecnico_id || null;
 
     if (!qr_token) {
         return res.status(400).json({ ok: false, mensaje: 'Código QR no proporcionado' });
@@ -345,8 +346,13 @@ const validarQr = async (req, res) => {
         const solicitud = rows[0];
 
         await db.query(
-            `UPDATE solicitudes SET estado = 'completado', estado_pago = 'pagado' WHERE id = ?`,
-            [solicitud.id]
+            `UPDATE solicitudes
+             SET estado = 'completado',
+                 estado_pago = 'pagado',
+                 tecnico_id = COALESCE(tecnico_id, ?),
+                 completado_en = NOW()
+             WHERE id = ?`,
+            [tecnicoActual, solicitud.id]
         );
 
         return res.json({
@@ -354,7 +360,7 @@ const validarQr = async (req, res) => {
             mensaje: '¡Trabajo completado exitosamente!',
             solicitud_id: solicitud.id,
             cliente_id: solicitud.cliente_id,
-            tecnico_id: solicitud.tecnico_id || tecnico_id
+            tecnico_id: solicitud.tecnico_id || tecnicoActual
         });
     } catch (error) {
         console.error('Error al validar QR:', error);
@@ -472,6 +478,52 @@ const crearResena = async (req, res) => {
     }
 };
 
+const obtenerGanancias = async (req, res) => {
+    try {
+        const SEMANA = "YEARWEEK(x.fecha, 1) = YEARWEEK(NOW(), 1)";
+        const MES = "YEAR(x.fecha) = YEAR(NOW()) AND MONTH(x.fecha) = MONTH(NOW())";
+        const ANTERIOR =
+            "PERIOD_DIFF(EXTRACT(YEAR_MONTH FROM NOW()), EXTRACT(YEAR_MONTH FROM x.fecha)) = 1";
+
+        const [[r]] = await db.query(
+            `SELECT
+        COALESCE(SUM(CASE WHEN ${SEMANA} THEN x.monto ELSE 0 END), 0) AS total_semana,
+        COUNT(CASE WHEN ${SEMANA} THEN 1 END) AS trabajos_semana,
+        COALESCE(SUM(CASE WHEN ${MES} THEN x.monto ELSE 0 END), 0) AS total_mes,
+        COUNT(CASE WHEN ${MES} THEN 1 END) AS trabajos_mes,
+        COALESCE(SUM(CASE WHEN ${ANTERIOR} THEN x.monto ELSE 0 END), 0) AS total_mes_anterior,
+        COALESCE(SUM(x.monto), 0) AS total_historico,
+        COUNT(*) AS trabajos_historico
+      FROM (
+        SELECT
+          COALESCE(s.completado_en, s.creado_en) AS fecha,
+          COALESCE(s.monto_final, p.monto_final, p.monto_propuesto, s.presupuesto_estimado, 0) AS monto
+        FROM solicitudes s
+        LEFT JOIN postulaciones p
+          ON p.solicitud_id = s.id AND p.estado = 'aceptada'
+        WHERE COALESCE(s.tecnico_id, p.tecnico_id) = ?
+          AND s.estado = 'completado'
+          AND s.estado_pago = 'pagado'
+      ) x`,
+            [req.usuario.id]
+        );
+
+        const n = (v) => Number(v) || 0;
+        return res.json({
+            total_semana: n(r.total_semana),
+            trabajos_semana: n(r.trabajos_semana),
+            total_mes: n(r.total_mes),
+            trabajos_mes: n(r.trabajos_mes),
+            total_mes_anterior: n(r.total_mes_anterior),
+            total_historico: n(r.total_historico),
+            trabajos_historico: n(r.trabajos_historico),
+        });
+    } catch (error) {
+        console.error("Error al calcular ganancias:", error);
+        return res.status(500).json({ mensaje: "Error interno al calcular las ganancias" });
+    }
+};
+
 const obtenerMiResena = async (req, res) => {
     try {
         const [rows] = await db.query(
@@ -500,6 +552,7 @@ module.exports = {
     responderContratacion,
     iniciarCierre,
     validarQr,
+    obtenerGanancias,
     crearResena, 
     obtenerMiResena
 };
