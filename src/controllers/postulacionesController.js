@@ -1,13 +1,13 @@
 const db = require('../db');
 
-// Error con código HTTP para cortar la ejecución limpiamente
+// Error con cÃ³digo HTTP para cortar la ejecuciÃ³n limpiamente
 const fallo = (status, mensaje) => {
     const e = new Error(mensaje);
     e.status = status;
     return e;
 };
 
-// Funciona tanto si db es un pool como si es una sola conexión
+// Funciona tanto si db es un pool como si es una sola conexiÃ³n
 const abrirConexion = async () => (db.getConnection ? await db.getConnection() : db);
 
 const responderError = (res, error, texto) => {
@@ -19,7 +19,7 @@ const responderError = (res, error, texto) => {
     });
 };
 
-// ---------- TÉCNICO: postularse ----------
+// ---------- TÃ‰CNICO: postularse ----------
 const crearPostulacion = async (req, res) => {
     try {
         const tecnico_id = req.usuario.id;
@@ -36,18 +36,18 @@ const crearPostulacion = async (req, res) => {
         );
         if (sol.length === 0) return res.status(404).json({ mensaje: 'Solicitud no encontrada' });
         if (sol[0].estado !== 'pendiente') {
-            return res.status(409).json({ mensaje: 'Esta solicitud ya no está disponible' });
+            return res.status(409).json({ mensaje: 'Esta solicitud ya no estÃ¡ disponible' });
         }
 
         // Si concuerda con el precio, el monto es SIEMPRE el del cliente (no el que mande la app)
         if (aceptaPresupuesto) {
             const presupuesto = Number(sol[0].presupuesto_estimado);
             if (!(presupuesto > 0)) {
-                return res.status(400).json({ mensaje: 'El cliente no indicó un presupuesto' });
+                return res.status(400).json({ mensaje: 'El cliente no indicÃ³ un presupuesto' });
             }
             monto = presupuesto;
         }
-        if (!(monto > 0)) return res.status(400).json({ mensaje: 'Monto no válido' });
+        if (!(monto > 0)) return res.status(400).json({ mensaje: 'Monto no vÃ¡lido' });
 
         const [existe] = await db.query(
             'SELECT id FROM postulaciones WHERE solicitud_id = ? AND tecnico_id = ?',
@@ -67,9 +67,9 @@ const crearPostulacion = async (req, res) => {
             [solicitud_id, tecnico_id, monto, mensajeFinal, aceptaPresupuesto ? 1 : 0]
         );
 
-        return res.status(200).json({ mensaje: 'Postulación enviada con éxito' });
+        return res.status(200).json({ mensaje: 'PostulaciÃ³n enviada con Ã©xito' });
     } catch (error) {
-        return responderError(res, error, 'Error interno al crear postulación');
+        return responderError(res, error, 'Error interno al crear postulaciÃ³n');
     }
 };
 
@@ -110,7 +110,6 @@ const listarPostulacionesDeSolicitud = async (req, res) => {
     }
 };
 
-
 // ---------- CLIENTE: aceptar (abre el chat) ----------
 const aceptarPostulacion = async (req, res) => {
     const conn = await abrirConexion();
@@ -124,7 +123,7 @@ const aceptarPostulacion = async (req, res) => {
             [id]
         );
 
-        if (!post) throw fallo(404, 'Postulación no encontrada');
+        if (!post) throw fallo(404, 'PostulaciÃ³n no encontrada');
 
         const [[sol]] = await conn.query(
             'SELECT id, cliente_id, estado FROM solicitudes WHERE id = ? FOR UPDATE',
@@ -132,17 +131,16 @@ const aceptarPostulacion = async (req, res) => {
         );
         if (sol.cliente_id !== req.usuario.id) throw fallo(403, 'No es tu solicitud');
         if (sol.estado !== 'pendiente') throw fallo(409, 'La solicitud ya tiene un acuerdo en proceso');
-        if (post.estado !== 'pendiente') throw fallo(409, 'Esta propuesta ya no está disponible');
+        if (post.estado !== 'pendiente') throw fallo(409, 'Esta propuesta ya no estÃ¡ disponible');
 
         await conn.query("UPDATE postulaciones SET estado = 'aceptada' WHERE id = ?", [post.id]);
 
-       
         await conn.query(
             "UPDATE solicitudes SET estado = 'en_proceso', tecnico_id = ? WHERE id = ?",
             [post.tecnico_id, sol.id]
         );
 
-        // Crea el chat; si ya existía (caso raro), lo reactiva
+        // Crea el chat; si ya existÃ­a (caso raro), lo reactiva
         await conn.query(
             `INSERT INTO conversaciones (cliente_id, tecnico_id, solicitud_id, activa)
              VALUES (?, ?, ?, 1)
@@ -158,7 +156,7 @@ const aceptarPostulacion = async (req, res) => {
             await conn.query('UPDATE solicitudes SET monto_final = ? WHERE id = ?', [post.monto_propuesto, sol.id]);
             await conn.query(
                 `INSERT INTO mensajes (conversacion_id, emisor_id, contenido, tipo)
-         VALUES (?, ?, ?, 'sistema')`,
+                 VALUES (?, ?, ?, 'sistema')`,
                 [conv.id, sol.cliente_id, `Acuerdo cerrado por $${Number(post.monto_propuesto).toFixed(2)}`]
             );
         }
@@ -184,7 +182,7 @@ const rechazarPostulacion = async (req, res) => {
              WHERE p.id = ?`,
             [id]
         );
-        if (!post) throw fallo(404, 'Postulación no encontrada');
+        if (!post) throw fallo(404, 'PostulaciÃ³n no encontrada');
         if (post.cliente_id !== req.usuario.id) throw fallo(403, 'No es tu solicitud');
         if (post.estado !== 'pendiente') throw fallo(409, 'Solo se pueden rechazar propuestas pendientes');
 
@@ -206,14 +204,14 @@ const cancelarAcuerdo = async (req, res) => {
             'SELECT id, solicitud_id, tecnico_id, estado FROM postulaciones WHERE id = ? FOR UPDATE',
             [id]
         );
-        if (!post) throw fallo(404, 'Postulación no encontrada');
+        if (!post) throw fallo(404, 'PostulaciÃ³n no encontrada');
 
         const [[sol]] = await conn.query(
             'SELECT id, cliente_id FROM solicitudes WHERE id = ? FOR UPDATE',
             [post.solicitud_id]
         );
         if (sol.cliente_id !== req.usuario.id) throw fallo(403, 'No es tu solicitud');
-        if (post.estado !== 'aceptada') throw fallo(409, 'No hay un acuerdo activo con este técnico');
+        if (post.estado !== 'aceptada') throw fallo(409, 'No hay un acuerdo activo con este tÃ©cnico');
 
         await conn.query(
             "UPDATE postulaciones SET estado = 'rechazada', monto_final = NULL WHERE id = ?",
@@ -224,14 +222,14 @@ const cancelarAcuerdo = async (req, res) => {
             [sol.id]
         );
 
-        // borra la conversasion de la base de datos
+        // Borra la conversaciÃ³n de la base de datos
         await conn.query(
             'DELETE FROM conversaciones WHERE solicitud_id = ? AND tecnico_id = ?',
             [sol.id, post.tecnico_id]
         );
 
         await conn.commit();
-        return res.json({ mensaje: 'Acuerdo cancelado y chat eliminado con éxito' });
+        return res.json({ mensaje: 'Acuerdo cancelado y chat eliminado con Ã©xito' });
     } catch (error) {
         await conn.rollback();
         return responderError(res, error, 'Error interno al cancelar el acuerdo');
@@ -240,7 +238,7 @@ const cancelarAcuerdo = async (req, res) => {
     }
 };
 
-// ---------- TÉCNICO: mis postulaciones ----------
+// ---------- TÃ‰CNICO: mis postulaciones ----------
 const obtenerMisPostulaciones = async (req, res) => {
     try {
         const [rows] = await db.query(
@@ -264,14 +262,64 @@ const obtenerMisPostulaciones = async (req, res) => {
     }
 };
 
-// ---------- TÉCNICO: retirar una propuesta pendiente ----------
+// ---------- TÃ‰CNICO: agenda de visitas y entregas ----------
+const obtenerAgendaTecnico = async (req, res) => {
+    try {
+        const tecnicoId = req.usuario.id;
+
+        const [rows] = await db.query(
+            `SELECT 
+                s.id AS solicitud_id,
+                s.titulo,
+                s.descripcion,
+                s.direccion_texto,
+                s.latitud,
+                s.longitud,
+                s.estado AS estado_solicitud,
+                COALESCE(s.monto_final, p.monto_propuesto) AS monto,
+                u.id AS cliente_id,
+                u.nombre AS cliente_nombre,
+                u.foto_url AS cliente_foto,
+                c.nombre AS categoria_nombre,
+                conv.id AS conversacion_id,
+                p.mensaje AS mensaje_postulacion,
+                SUBSTRING_INDEX(SUBSTRING_INDEX(p.mensaje, 'Visita: ', -1), ' |', 1) AS fecha_visita,
+                SUBSTRING_INDEX(SUBSTRING_INDEX(p.mensaje, 'Entrega: ', -1), '\n', 1) AS fecha_entrega
+             FROM solicitudes s
+             JOIN postulaciones p 
+                  ON p.solicitud_id = s.id AND p.tecnico_id = s.tecnico_id
+             JOIN usuarios u ON u.id = s.cliente_id
+             JOIN categorias c ON c.id = s.categoria_id
+             LEFT JOIN conversaciones conv 
+                  ON conv.solicitud_id = s.id AND conv.tecnico_id = s.tecnico_id
+             WHERE s.tecnico_id = ?
+               AND p.estado = 'aceptada'
+               AND s.estado IN ('en_proceso', 'pendiente', 'completada')
+             ORDER BY fecha_visita ASC, s.creado_en DESC`,
+            [tecnicoId]
+        );
+
+        const regexFecha = /^\d{4}-\d{2}-\d{2}$/;
+        const agenda = rows.map(item => ({
+            ...item,
+            fecha_visita: regexFecha.test((item.fecha_visita || '').trim()) ? item.fecha_visita.trim() : null,
+            fecha_entrega: regexFecha.test((item.fecha_entrega || '').trim()) ? item.fecha_entrega.trim() : null
+        }));
+
+        return res.json(agenda);
+    } catch (error) {
+        return responderError(res, error, 'Error interno al obtener la agenda del tÃ©cnico');
+    }
+};
+
+// ---------- TÃ‰CNICO: retirar una propuesta pendiente ----------
 const retirarPostulacion = async (req, res) => {
     try {
         const [[post]] = await db.query(
             'SELECT id, tecnico_id, estado FROM postulaciones WHERE id = ?', [req.params.id]
         );
-        if (!post) throw fallo(404, 'Postulación no encontrada');
-        if (post.tecnico_id !== req.usuario.id) throw fallo(403, 'No es tu postulación');
+        if (!post) throw fallo(404, 'PostulaciÃ³n no encontrada');
+        if (post.tecnico_id !== req.usuario.id) throw fallo(403, 'No es tu postulaciÃ³n');
         if (post.estado !== 'pendiente') {
             throw fallo(409, 'Solo puedes cancelar propuestas pendientes. Si ya fue aceptada, cancela el acuerdo desde el chat');
         }
@@ -289,5 +337,6 @@ module.exports = {
     retirarPostulacion,
     rechazarPostulacion,
     cancelarAcuerdo,
-    obtenerMisPostulaciones
+    obtenerMisPostulaciones,
+    obtenerAgendaTecnico
 };

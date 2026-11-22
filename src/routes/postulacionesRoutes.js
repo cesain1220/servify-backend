@@ -1,13 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const {
-    crearPostulacion, listarPostulacionesDeSolicitud, aceptarPostulacion,
-    rechazarPostulacion, cancelarAcuerdo, obtenerMisPostulaciones, retirarPostulacion
+    crearPostulacion,
+    listarPostulacionesDeSolicitud,
+    aceptarPostulacion,
+    rechazarPostulacion,
+    cancelarAcuerdo,
+    obtenerMisPostulaciones,
+    retirarPostulacion,
+    obtenerAgendaTecnico
 } = require('../controllers/postulacionesController');
 const authMiddleware = require('../middlewares/authMiddleware');
 
 router.post('/', authMiddleware, crearPostulacion);
 router.get('/mias', authMiddleware, obtenerMisPostulaciones);
+router.get('/agenda', authMiddleware, obtenerAgendaTecnico);
 router.get('/solicitud/:solicitudId', authMiddleware, listarPostulacionesDeSolicitud);
 router.put('/:id/aceptar', authMiddleware, aceptarPostulacion);
 router.put('/:id/rechazar', authMiddleware, rechazarPostulacion);
