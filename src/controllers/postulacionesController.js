@@ -245,7 +245,8 @@ const obtenerMisPostulaciones = async (req, res) => {
     try {
         const [rows] = await db.query(
             `SELECT p.id, p.solicitud_id, s.titulo, c.nombre AS categoria_nombre,
-                    p.monto_propuesto, p.estado,p.acepta_presupuesto, p.creado_en,
+                    p.monto_propuesto, p.estado, s.estado AS estado_solicitud,
+                    p.acepta_presupuesto, p.creado_en,
                     conv.id AS conversacion_id
              FROM postulaciones p
              JOIN solicitudes s ON s.id = p.solicitud_id
