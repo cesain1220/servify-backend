@@ -85,10 +85,13 @@ module.exports = (io) => {
                 // Si ya hay un acuerdo cerrado, no se permiten más ofertas
                 const [[yaAcordado]] = await db.query(
                     `SELECT id FROM mensajes
-                     WHERE conversacion_id = ? AND tipo = 'oferta' AND estado_oferta = 'aceptada' LIMIT 1`,
+                 WHERE conversacion_id = ? AND tipo = 'oferta' AND estado_oferta = 'aceptada' LIMIT 1`,
                     [conversacionId]
                 );
-                if (yaAcordado) {
+                const [[solMonto]] = await db.query(
+                    'SELECT monto_final FROM solicitudes WHERE id = ?', [conv.solicitud_id]
+                );
+                if (yaAcordado || solMonto?.monto_final != null) {
                     socket.emit('error_operacion', { mensaje: 'Ya llegaron a un acuerdo' });
                     return ack?.({ ok: false, error: 'Ya llegaron a un acuerdo' });
                 }

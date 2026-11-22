@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
     crearPostulacion, listarPostulacionesDeSolicitud, aceptarPostulacion,
-    rechazarPostulacion, cancelarAcuerdo, obtenerMisPostulaciones
+    rechazarPostulacion, cancelarAcuerdo, obtenerMisPostulaciones, retirarPostulacion
 } = require('../controllers/postulacionesController');
 const authMiddleware = require('../middlewares/authMiddleware');
 
@@ -12,5 +12,6 @@ router.get('/solicitud/:solicitudId', authMiddleware, listarPostulacionesDeSolic
 router.put('/:id/aceptar', authMiddleware, aceptarPostulacion);
 router.put('/:id/rechazar', authMiddleware, rechazarPostulacion);
 router.put('/:id/cancelar-acuerdo', authMiddleware, cancelarAcuerdo);
+router.delete('/:id', authMiddleware, retirarPostulacion);
 
 module.exports = router;
