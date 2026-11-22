@@ -12,6 +12,7 @@ const {
     iniciarCierre,
     validarQr,
     crearResena, 
+    obtenerGanancias,
     obtenerMiResena
 } = require('../controllers/solicitudesController');
 const { subirFotosSolicitud } = require('../controllers/fotosController');
