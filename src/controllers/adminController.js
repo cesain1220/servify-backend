@@ -162,13 +162,13 @@ exports.cancelarSolicitudAdmin = async (req, res) => {
 
     try {
       await db.query(
-        'UPDATE solicitudes SET estado = "cancelado", descripcion = ? WHERE id = ?',
-        [nuevaDescripcion, id]
+        'UPDATE solicitudes SET estado = ?, descripcion = ? WHERE id = ?',
+        ['cancelado', nuevaDescripcion, id]
       );
     } catch (enumErr) {
       await db.query(
-        'UPDATE solicitudes SET estado = "cancelada", descripcion = ? WHERE id = ?',
-        [nuevaDescripcion, id]
+        'UPDATE solicitudes SET estado = ?, descripcion = ? WHERE id = ?',
+        ['cancelada', nuevaDescripcion, id]
       );
     }
 
