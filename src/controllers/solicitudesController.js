@@ -86,7 +86,7 @@ const obtenerMisSolicitudes = async (req, res) => {
     try {
         const cliente_id = req.usuario.id;
 
-        // Unificamos solicitudes públicas y contrataciones directas del cliente
+        // Unificamos solicitudes públicas y contrataciones directas del cliente (incluyendo motivo_rechazo y tecnico_nombre)
         const [rows] = await db.query(
             `SELECT 
                 s.id, 
@@ -97,7 +97,9 @@ const obtenerMisSolicitudes = async (req, res) => {
                 s.creado_en,
                 c.nombre AS categoria_nombre,
                 (SELECT COUNT(*) FROM postulaciones p
-                  WHERE p.solicitud_id = s.id AND p.estado IN ('pendiente','aceptada')) AS total_propuestas
+                  WHERE p.solicitud_id = s.id AND p.estado IN ('pendiente','aceptada')) AS total_propuestas,
+                NULL AS motivo_rechazo,
+                NULL AS tecnico_nombre
              FROM solicitudes s
              JOIN categorias c ON c.id = s.categoria_id
              WHERE s.cliente_id = ?
@@ -112,9 +114,12 @@ const obtenerMisSolicitudes = async (req, res) => {
                 cd.estado,
                 cd.creado_en,
                 c.nombre AS categoria_nombre,
-                0 AS total_propuestas
+                0 AS total_propuestas,
+                cd.motivo_rechazo,
+                ut.nombre AS tecnico_nombre
              FROM contrataciones_directas cd
              JOIN categorias c ON c.id = cd.categoria_id
+             JOIN usuarios ut ON ut.id = cd.tecnico_id
              WHERE cd.cliente_id = ?
 
              ORDER BY creado_en DESC`,
@@ -234,6 +239,7 @@ const obtenerContratacionesTecnico = async (req, res) => {
                 cd.descripcion,
                 cd.monto_acordado,
                 cd.estado,
+                cd.motivo_rechazo,
                 cd.creado_en,
                 u.nombre AS cliente_nombre,
                 u.foto_url AS cliente_foto,
@@ -243,6 +249,7 @@ const obtenerContratacionesTecnico = async (req, res) => {
              JOIN usuarios u ON cd.cliente_id = u.id
              JOIN categorias c ON cd.categoria_id = c.id
              WHERE cd.tecnico_id = ?
+               AND cd.estado != 'rechazado'
              ORDER BY cd.creado_en DESC`,
             [tecnico_id]
         );
@@ -260,15 +267,23 @@ const obtenerContratacionesTecnico = async (req, res) => {
 const responderContratacion = async (req, res) => {
     try {
         const { id } = req.params;
-        const { estado } = req.body; // 'aceptado' o 'rechazado'
+        const { estado, motivo } = req.body; // 'aceptado' o 'rechazado'
 
         if (!['aceptado', 'rechazado'].includes(estado)) {
             return res.status(400).json({ mensaje: 'Estado no válido (debe ser aceptado o rechazado)' });
         }
 
+        if (estado === 'rechazado' && (!motivo || !motivo.trim())) {
+            return res.status(400).json({ mensaje: 'Debes indicar el motivo del rechazo' });
+        }
+
+        const motivoFinal = estado === 'rechazado' ? motivo.trim() : null;
+
         const [resultado] = await db.query(
-            `UPDATE contrataciones_directas SET estado = ? WHERE id = ?`,
-            [estado, id]
+            `UPDATE contrataciones_directas
+             SET estado = ?, motivo_rechazo = ?
+             WHERE id = ?`,
+            [estado, motivoFinal, id]
         );
 
         if (resultado.affectedRows === 0) {
@@ -385,7 +400,6 @@ const crearResena = async (req, res) => {
     }
 
     try {
-        // 🌟 1. VALIDACIONES ANTIDOBLE CALIFICACIÓN
         if (solicitud_id) {
             const [resenaExistente] = await db.query(
                 'SELECT id FROM resenas WHERE autor_id = ? AND solicitud_id = ? LIMIT 1',
@@ -412,7 +426,6 @@ const crearResena = async (req, res) => {
             }
         }
 
-        // 🔥 2. BÚSQUEDA ROBUSTA DE LOS INVOLUCRADOS
         if (solicitud_id) {
             const [[solicitud]] = await db.query(
                 'SELECT cliente_id, tecnico_id, estado FROM solicitudes WHERE id = ?', [solicitud_id]
