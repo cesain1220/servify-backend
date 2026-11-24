@@ -281,7 +281,7 @@ exports.getPerfilCliente = async (req, res) => {
         const [[c]] = await db.query(
             'SELECT id, nombre, foto_url, creado_en, rol FROM usuarios WHERE id = ?', [id]
         );
-        if (!c || !['cliente', 'ambos'].includes(String(c.rol).toLowerCase())) {
+        if (!c || String(c.rol).toLowerCase() !== 'cliente') {
             return res.status(404).json({ mensaje: 'Cliente no encontrado' });
         }
 
