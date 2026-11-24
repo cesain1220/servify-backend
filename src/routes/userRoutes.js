@@ -21,6 +21,8 @@ const recibirFoto = (req, res, next) => {
     });
 };
 
+router.get('/:id/perfil-cliente', verificarToken, userController.getPerfilCliente);
+
 // Perfil propio
 router.get('/perfil', verificarToken, userController.obtenerPerfil);
 router.put('/perfil', verificarToken, userController.actualizarPerfil);

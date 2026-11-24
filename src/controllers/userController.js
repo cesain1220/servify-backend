@@ -271,6 +271,72 @@ exports.cambiarEstadoVip = async (req, res) => {
     } 
 };
 
+// GET: perfil público de un cliente (para que el técnico lo evalúe)
+exports.getPerfilCliente = async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const yo = req.usuario.id;
+        if (!Number.isInteger(id)) return res.status(400).json({ mensaje: 'Id no válido' });
+
+        const [[c]] = await db.query(
+            'SELECT id, nombre, foto_url, creado_en, rol FROM usuarios WHERE id = ?', [id]
+        );
+        if (!c || !['cliente', 'ambos'].includes(String(c.rol).toLowerCase())) {
+            return res.status(404).json({ mensaje: 'Cliente no encontrado' });
+        }
+
+        // Solo si existe una relación real (o es el propio usuario / un admin)
+        if (id !== yo && String(req.usuario.rol).toLowerCase() !== 'admin') {
+            const [rel] = await db.query(
+                `SELECT 1 FROM solicitudes WHERE cliente_id = ? AND (estado = 'pendiente' OR tecnico_id = ?)
+                 UNION
+                 SELECT 1 FROM conversaciones WHERE cliente_id = ? AND tecnico_id = ?
+                 UNION
+                 SELECT 1 FROM postulaciones p JOIN solicitudes s ON s.id = p.solicitud_id
+                  WHERE s.cliente_id = ? AND p.tecnico_id = ?
+                 LIMIT 1`,
+                [id, yo, id, yo, id, yo]
+            );
+            if (rel.length === 0) return res.status(403).json({ mensaje: 'No tienes acceso a este perfil' });
+        }
+
+        const [[stats]] = await db.query(
+            `SELECT COUNT(*) AS total, COALESCE(AVG(calificacion), 0) AS promedio
+             FROM resenas WHERE destinatario_id = ?`, [id]
+        );
+        const [[sol]] = await db.query(
+            `SELECT COUNT(*) AS publicadas,
+                    COALESCE(SUM(estado = 'completado'), 0) AS completadas
+             FROM solicitudes WHERE cliente_id = ?`, [id]
+        );
+        const [resenas] = await db.query(
+            `SELECT r.id, r.calificacion, r.comentario, r.creado_en,
+                    u.nombre AS autor_nombre, u.foto_url AS autor_foto,
+                    s.titulo AS solicitud_titulo
+             FROM resenas r
+             JOIN usuarios u ON u.id = r.autor_id
+             LEFT JOIN solicitudes s ON s.id = r.solicitud_id
+             WHERE r.destinatario_id = ?
+             ORDER BY r.creado_en DESC LIMIT 20`, [id]
+        );
+
+        return res.json({
+            id: c.id,
+            nombre: c.nombre,
+            foto_url: c.foto_url,
+            miembro_desde: c.creado_en,
+            calificacion: Number(stats.promedio),
+            total_resenas: Number(stats.total),
+            solicitudes_publicadas: Number(sol.publicadas),
+            solicitudes_completadas: Number(sol.completadas),
+            resenas
+        });
+    } catch (error) {
+        console.error('Error al obtener perfil del cliente:', error);
+        return res.status(500).json({ mensaje: 'Error interno al cargar el perfil' });
+    }
+};
+
 // ========================================================
 // MEMBRESÍAS Y PLANES (ESTÁNDAR Y VIP)
 // ========================================================
