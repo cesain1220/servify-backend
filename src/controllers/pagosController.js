@@ -1,9 +1,13 @@
 const Stripe = require('stripe');
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY
+    ? new Stripe(process.env.STRIPE_SECRET_KEY)
+    : null;
 const db = require('../db');
 
 // Helper: Obtener o crear Customer en Stripe
 async function obtenerOCrearStripeCustomer(usuarioId) {
+    if (!stripe) throw new Error('Stripe no está configurado en este entorno');
+
     const [rows] = await db.query(
         'SELECT id, nombre, correo, stripe_customer_id FROM usuarios WHERE id = ?',
         [usuarioId]
@@ -30,6 +34,10 @@ async function obtenerOCrearStripeCustomer(usuarioId) {
 // 1. Crear intención de pago con tarjeta (Protegido con authMiddleware)
 const crearPaymentSheet = async (req, res) => {
     try {
+        if (!stripe) {
+            return res.status(503).json({ ok: false, mensaje: 'Stripe no está configurado en este servidor' });
+        }
+
         const usuario_id = req.usuario.id;
         let {
             tipo = 'servicio',
@@ -53,7 +61,6 @@ const crearPaymentSheet = async (req, res) => {
                 if (solRows.length && solRows[0].tecnico_id) {
                     tecnico_id = solRows[0].tecnico_id;
                 } else {
-                    // Fallback: buscar si hay una cotización aceptada para esa solicitud
                     try {
                         const [cotRows] = await db.query(
                             `SELECT tecnico_id FROM cotizaciones WHERE solicitud_id = ? AND estado = 'aceptada' LIMIT 1`,
@@ -102,7 +109,6 @@ const crearPaymentSheet = async (req, res) => {
             }
         });
 
-        // Solo insertar en pagos_servicios si tenemos tecnico_id válido (columna NOT NULL)
         if (tipo === 'servicio' && tecnico_id) {
             const montoNum = Number(monto);
             const comision = Number((montoNum * 0.10).toFixed(2));
@@ -136,6 +142,10 @@ const crearPaymentSheet = async (req, res) => {
 
 // 2. Webhook oficial de Stripe (Público, verificado por firma criptográfica)
 const stripeWebhook = async (req, res) => {
+    if (!stripe) {
+        return res.status(503).send('Stripe no configurado');
+    }
+
     const sig = req.headers['stripe-signature'];
     let event;
 
@@ -169,7 +179,6 @@ const stripeWebhook = async (req, res) => {
                     [pi.id]
                 );
 
-                // Sincroniza con tu flujo de cierre en solicitudes
                 if (solicitud_id) {
                     await db.query(
                         `UPDATE solicitudes 
@@ -188,7 +197,6 @@ const stripeWebhook = async (req, res) => {
                     );
                 }
 
-                // Notificación en tiempo real por Socket.IO
                 const io = req.app.get('io');
                 if (io && tecnico_id) {
                     io.emit('pago_confirmado', {

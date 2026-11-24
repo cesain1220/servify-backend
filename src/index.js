@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
+const path = require('path');
 const { Server } = require('socket.io');
 require('dotenv').config();
 const db = require('./db');
@@ -30,6 +31,12 @@ app.post(
 );
 
 app.use(express.json());
+
+// Servir archivos estáticos del Dashboard BI Web
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/bi', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/bi.html'));
+});
 
 // Endpoint de prueba de salud / conexión
 app.get('/api/health', async (req, res) => {

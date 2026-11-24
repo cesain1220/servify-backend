@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Servify BI — Dashboard Ejecutivo en Tiempo Real</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Plus Jakarta Sans', 'sans-serif'],
+                    },
+                    colors: {
+                        servify: {
+                            navy: '#0B1F3A',
+                            navyDark: '#071529',
+                            navyLight: '#132E53',
+                            teal: '#34D1BF',
+                            sky: '#7DB7FF',
+                            gold: '#FFB300',
+                            goldLight: '#FFF8E1',
+                            bg: '#F2F5F9',
+                            border: '#E3E9F0',
+                            muted: '#6B7C93'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #F2F5F9; color: #0B1F3A; }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            80%, 100% { transform: scale(2.2); opacity: 0; }
+        }
+        .pulse-dot::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 9999px;
+            background-color: #34D1BF;
+            animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #F2F5F9; }
+        ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-servify-teal selection:text-servify-navy">
+
+    <!-- MODAL DE INICIO DE SESIÓN ADMIN (Solo aparece si no hay token guardado) -->
+    <div id="authModal" class="hidden fixed inset-0 z-50 bg-servify-navyDark/85 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-7 shadow-2xl border border-servify-border space-y-5">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-servify-navy text-servify-teal flex items-center justify-center font-display font-extrabold text-xl">S</div>
+                <div>
+                    <h2 class="font-display font-extrabold text-lg text-servify-navy">Acceso Servify BI</h2>
+                    <p class="text-xs text-servify-muted">Inicia sesión con tu cuenta de Administrador</p>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-servify-navy mb-1">URL del Servidor API</label>
+                    <input id="inputApiBase" type="text" class="w-full px-3.5 py-2.5 text-xs bg-servify-bg border border-servify-border rounded-xl font-mono focus:outline-none focus:border-servify-navy" placeholder="https://tu-api.onrender.com">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-servify-navy mb-1">Correo de Administrador</label>
+                    <input id="inputLoginEmail" type="email" class="w-full px-3.5 py-2.5 text-sm bg-servify-bg border border-servify-border rounded-xl focus:outline-none focus:border-servify-navy" placeholder="admin@servify.com">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-servify-navy mb-1">Contraseña</label>
+                    <input id="inputLoginPass" type="password" class="w-full px-3.5 py-2.5 text-sm bg-servify-bg border border-servify-border rounded-xl focus:outline-none focus:border-servify-navy" placeholder="••••••••">
+                </div>
+            </div>
+
+            <p id="loginErrorMsg" class="hidden text-xs font-semibold text-red-600 bg-red-50 px-3 py-2 rounded-xl"></p>
+
+            <button id="btnLoginBI" type="button" class="w-full py-3 rounded-xl bg-servify-navy hover:bg-servify-navyLight text-white font-extrabold text-sm shadow-md transition cursor-pointer">
+                Conectar con Base de Datos en Vivo
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL DE AUDITORÍA DE SERVICIO (Para reseñas con calificación baja) -->
+    <div id="auditModal" class="hidden fixed inset-0 z-50 bg-servify-navyDark/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-servify-border space-y-4">
+            <div class="flex items-center justify-between">
+                <span class="px-2.5 py-1 text-[10px] font-extrabold uppercase rounded-lg bg-red-100 text-red-700">Auditoría de Calidad</span>
+                <button id="btnCloseAudit" type="button" class="text-servify-muted hover:text-servify-navy font-bold text-sm cursor-pointer">✕</button>
+            </div>
+            <div>
+                <h3 id="auditModalTitle" class="font-display font-extrabold text-lg text-servify-navy">Auditar Servicio SOL-000</h3>
+                <p id="auditModalDesc" class="text-xs text-servify-muted mt-1 leading-relaxed"></p>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-servify-navy mb-1.5">Resolución / Motivo de auditoría</label>
+                <textarea id="auditReasonInput" rows="3" class="w-full p-3 text-xs bg-servify-bg border border-servify-border rounded-xl focus:outline-none focus:border-servify-navy" placeholder="Ej. Servicio auditado por reporte de cobro indebido. Se suspende la orden y se notifica al técnico."></textarea>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button id="btnCancelAudit" type="button" class="px-4 py-2 rounded-xl text-xs font-bold text-servify-muted hover:bg-servify-bg cursor-pointer">Cancelar</button>
+                <button id="btnConfirmAudit" type="button" class="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold shadow-sm cursor-pointer">Registrar Auditoría y Dar de Baja</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-1 flex-col lg:flex-row">
+
+        <!-- BARRA LATERAL -->
+        <aside class="w-full lg:w-72 bg-servify-navy text-white flex flex-col justify-between shrink-0 shadow-2xl z-20">
+            <div>
+                <div class="p-6 border-b border-white/10 flex items-center justify-between">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-11 h-11 rounded-2xl bg-servify-navyLight border border-white/15 flex items-center justify-center shadow-inner relative">
+                            <svg class="w-6 h-6 text-servify-teal" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z"/>
+                            </svg>
+                            <span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-servify-gold border-2 border-servify-navy"></span>
+                        </div>
+                        <div>
+                            <h1 class="font-display font-extrabold text-xl tracking-tight leading-none text-white">Servify</h1>
+                            <span class="text-xs text-servify-teal font-semibold">Panel de Negocio BI</span>
+                        </div>
+                    </div>
+                    <span class="lg:hidden px-2.5 py-1 text-[11px] font-bold rounded-full bg-servify-teal/20 text-servify-teal border border-servify-teal/30">
+                        EN VIVO
+                    </span>
+                </div>
+
+                <!-- Filtros Reales -->
+                <div class="p-6 space-y-5">
+                    <div>
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-servify-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                            Filtrar Información
+                        </p>
+
+                        <label class="block text-xs text-slate-200 mb-1.5 font-semibold">Categoría de Servicio</label>
+                        <select id="filterCategory" class="w-full bg-servify-navyLight border border-white/15 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-servify-teal transition cursor-pointer">
+                            <option value="ALL">Todas las Categorías</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-200 mb-1.5 font-semibold">Tipo de Plan</label>
+                        <div class="grid grid-cols-3 gap-1.5 bg-servify-navyDark p-1 rounded-xl border border-white/10">
+                            <button type="button" data-plan="ALL" class="plan-btn active py-1.5 text-xs font-bold rounded-lg bg-servify-teal text-servify-navy transition cursor-pointer">Todos</button>
+                            <button type="button" data-plan="VIP" class="plan-btn py-1.5 text-xs font-semibold rounded-lg text-slate-300 hover:text-white transition cursor-pointer">★ VIP</button>
+                            <button type="button" data-plan="Estándar" class="plan-btn py-1.5 text-xs font-semibold rounded-lg text-slate-300 hover:text-white transition cursor-pointer">Estándar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Estado Conexión MySQL -->
+                <div class="mx-6 p-4 rounded-2xl bg-servify-navyLight border border-white/10 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-white flex items-center gap-2">
+                            <span class="relative flex h-2.5 w-2.5 pulse-dot">
+                                <span id="dbStatusDot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-servify-teal"></span>
+                            </span>
+                            Aiven MySQL Conectado
+                        </span>
+                        <span id="dbStatusBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-servify-teal/20 text-servify-teal">EN VIVO</span>
+                    </div>
+                    <p class="text-[11px] text-slate-300 leading-relaxed">
+                        Sincronizado directamente con <strong class="text-white">servify_db</strong>: usuarios, suscripciones, solicitudes y reseñas.
+                    </p>
+                    <div class="pt-1.5 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Última consulta:</span>
+                        <span id="lastSyncTime" class="font-mono text-white font-semibold">--:--:--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-white/10 mt-6 lg:mt-0 bg-servify-navyDark/40 space-y-3">
+                <div class="grid grid-cols-2 gap-2 text-center">
+                    <div class="rounded-xl bg-white/5 border border-white/10 py-2 px-2">
+                        <span class="block text-[10px] text-slate-300">Plan Estándar</span>
+                        <span class="font-display font-extrabold text-sm text-servify-teal">$3.99</span>
+                    </div>
+                    <div class="rounded-xl bg-servify-gold/15 border border-servify-gold/40 py-2 px-2">
+                        <span class="block text-[10px] text-servify-gold font-semibold">★ Plan VIP</span>
+                        <span class="font-display font-extrabold text-sm text-white">$6.99</span>
+                    </div>
+                </div>
+                <button id="btnLogoutBI" type="button" class="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] font-semibold transition cursor-pointer">
+                    Cambiar cuenta / Cerrar sesión BI
+                </button>
+            </div>
+        </aside>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <main class="flex-1 flex flex-col min-w-0">
+
+            <header class="bg-servify-navy lg:bg-white text-white lg:text-servify-navy border-b border-servify-border px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sticky top-0 z-10 shadow-sm">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider rounded-full bg-servify-teal/20 text-servify-teal lg:bg-servify-navy lg:text-white">Servify Admin BI</span>
+                        <span class="text-xs text-slate-300 lg:text-servify-muted font-medium">Datos en tiempo real desde MySQL</span>
+                    </div>
+                    <h2 class="font-display text-xl sm:text-2xl font-extrabold mt-1">
+                        Resultados y Métricas Clave de Servify
+                    </h2>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <button id="btnRefreshData" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white/10 lg:bg-servify-bg hover:bg-slate-200 text-white lg:text-servify-navy border border-white/15 lg:border-servify-border text-xs font-bold transition active:scale-95 cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Actualizar Datos
+                    </button>
+
+                    <button id="btnExportCSV" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-servify-teal lg:bg-servify-navy hover:opacity-95 text-servify-navy lg:text-white text-xs font-extrabold shadow-sm transition active:scale-95 cursor-pointer">
+                        <svg class="w-4 h-4 text-servify-navy lg:text-servify-teal" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Descargar CSV
+                    </button>
+                </div>
+            </header>
+
+            <div id="toastBanner" class="hidden mx-6 mt-4 px-4 py-3 rounded-2xl bg-servify-navy text-white text-xs font-medium flex items-center justify-between shadow-lg border border-servify-teal/50">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-servify-gold"></span>
+                    <span id="toastMessage">Datos sincronizados con MySQL.</span>
+                </div>
+                <button onclick="document.getElementById('toastBanner').classList.add('hidden')" class="text-slate-400 hover:text-white font-bold px-2 cursor-pointer">✕</button>
+            </div>
+
+            <div class="p-6 space-y-6 max-w-[1600px] w-full mx-auto">
+
+                <!-- 1. LAS 5 MÉTRICAS VITALES -->
+                <section aria-label="5 Métricas Vitales">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xs font-extrabold uppercase tracking-wider text-servify-navy flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-servify-teal"></span>
+                            1. Las 5 Métricas Vitales del Negocio
+                        </h3>
+                        <span class="text-xs text-servify-muted font-medium">Lectura en vivo de servify_db</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                        <!-- MÉTRICA 1 -->
+                        <div class="bg-white rounded-2xl p-5 border border-servify-border shadow-sm flex flex-col justify-between relative overflow-hidden">
+                            <div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-bold text-servify-muted">Dinero Recaudado</span>
+                                    <span class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-extrabold text-base">$</span>
+                                </div>
+                                <div class="mt-3 flex items-baseline gap-2">
+                                    <span id="kpiIngresos" class="font-display text-3xl font-extrabold text-servify-navy">$0.00</span>
+                                    <span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">real</span>
+                                </div>
+                            </div>
+                            <p id="kpiIngresosSub" class="text-xs text-servify-muted mt-3 pt-2.5 border-t border-servify-border leading-snug">
+                                Cargando suscripciones...
+                            </p>
+                            <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-servify-teal"></div>
+                        </div>
+
+                        <!-- MÉTRICA 2 -->
+                        <div class="bg-white rounded-2xl p-5 border border-servify-border shadow-sm flex flex-col justify-between relative overflow-hidden">
+                            <div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-bold text-servify-muted">Técnicos VIP Activos</span>
+                                    <span class="w-9 h-9 rounded-xl bg-servify-goldLight text-servify-gold flex items-center justify-center text-base">★</span>
+                                </div>
+                                <div class="mt-3 flex items-baseline gap-2">
+                                    <span id="kpiTecnicosVip" class="font-display text-3xl font-extrabold text-servify-navy">0</span>
+                                    <span id="kpiTotalTecnicos" class="text-sm font-bold text-servify-muted">de 0 técnicos</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-servify-muted mt-3 pt-2.5 border-t border-servify-border leading-snug">
+                                Con membresía activa en la plataforma
+                            </p>
+                            <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-servify-gold"></div>
+                        </div>
+
+                        <!-- MÉTRICA 3 -->
+                        <div class="bg-white rounded-2xl p-5 border border-servify-border shadow-sm flex flex-col justify-between relative overflow-hidden">
+                            <div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-bold text-servify-muted">Trabajos Solicitados</span>
+                                    <span class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                    </span>
+                                </div>
+                                <div class="mt-3 flex items-baseline gap-2">
+                                    <span id="kpiSolicitudes" class="font-display text-3xl font-extrabold text-servify-navy">0</span>
+                                    <span class="text-sm font-bold text-servify-muted">solicitudes</span>
+                                </div>
+                            </div>
+                            <p id="kpiSolicitudesSub" class="text-xs text-servify-muted mt-3 pt-2.5 border-t border-servify-border leading-snug">
+                                Cargando estados...
+                            </p>
+                            <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-blue-500"></div>
+                        </div>
+
+                        <!-- MÉTRICA 4 -->
+                        <div class="bg-white rounded-2xl p-5 border border-servify-border shadow-sm flex flex-col justify-between relative overflow-hidden">
+                            <div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-bold text-servify-muted">Usuarios en la App</span>
+                                    <span class="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                    </span>
+                                </div>
+                                <div class="mt-3 flex items-baseline gap-2">
+                                    <span id="kpiUsuariosTotales" class="font-display text-3xl font-extrabold text-servify-navy">0</span>
+                                    <span class="text-sm font-bold text-servify-muted">registrados</span>
+                                </div>
+                            </div>
+                            <p id="kpiUsuariosSub" class="text-xs text-servify-muted mt-3 pt-2.5 border-t border-servify-border leading-snug">
+                                Cargando distribución...
+                            </p>
+                            <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-servify-sky"></div>
+                        </div>
+
+                        <!-- MÉTRICA 5 -->
+                        <div class="bg-servify-navy text-white rounded-2xl p-5 border border-servify-navy shadow-md flex flex-col justify-between relative overflow-hidden sm:col-span-2 lg:col-span-1">
+                            <div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-bold text-slate-300">Recuperar Inversión</span>
+                                    <span class="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-servify-gold/20 text-servify-gold border border-servify-gold/30">Meta $2,059.75</span>
+                                </div>
+                                <div class="mt-3 flex items-baseline gap-2">
+                                    <span id="kpiRoiPct" class="font-display text-3xl font-extrabold text-white">0.00%</span>
+                                    <span id="kpiRoiAcumulado" class="text-xs font-semibold text-servify-teal">($0.00)</span>
+                                </div>
+                            </div>
+                            <div class="mt-3 pt-2.5 border-t border-white/10">
+                                <div class="w-full h-2 bg-white/15 rounded-full overflow-hidden">
+                                    <div id="kpiRoiBar" class="h-full bg-gradient-to-r from-servify-teal to-servify-gold rounded-full transition-all duration-500" style="width: 6%;"></div>
+                                </div>
+                                <p class="text-[11px] text-slate-300 mt-1.5">Avance real hacia punto de equilibrio</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. SEMÁFORO DE ALERTAS -->
+                <section aria-label="Alertas Visuales">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xs font-extrabold uppercase tracking-wider text-servify-navy flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-servify-gold"></span>
+                            2. Semáforo de Alertas (¿Qué requiere atención hoy?)
+                        </h3>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div id="alertCardPendientes" class="bg-white rounded-2xl p-4 border-l-4 border-l-red-500 border border-servify-border shadow-sm flex items-start gap-3.5">
+                            <div id="alertBadgePendientes" class="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                                <span id="alertDotPendientes" class="w-3.5 h-3.5 rounded-full bg-red-500"></span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span id="alertTitlePendientes" class="text-xs font-extrabold text-servify-navy">Estado de Solicitudes</span>
+                                    <span id="alertTagPendientes" class="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-red-100 text-red-700 shrink-0">--</span>
+                                </div>
+                                <p id="alertDescPendientes" class="text-xs text-servify-muted mt-1 leading-relaxed">Calculando...</p>
+                            </div>
+                        </div>
+
+                        <div id="alertCardVip" class="bg-white rounded-2xl p-4 border-l-4 border-l-servify-gold border border-servify-border shadow-sm flex items-start gap-3.5">
+                            <div id="alertBadgeVip" class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                                <span id="alertDotVip" class="w-3.5 h-3.5 rounded-full bg-servify-gold"></span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-extrabold text-servify-navy">Conversión a Plan VIP</span>
+                                    <span id="alertTagVip" class="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-amber-100 text-amber-800 shrink-0">--</span>
+                                </div>
+                                <p id="alertDescVip" class="text-xs text-servify-muted mt-1 leading-relaxed">Calculando...</p>
+                            </div>
+                        </div>
+
+                        <div id="alertCardCalidad" class="bg-white rounded-2xl p-4 border-l-4 border-l-emerald-500 border border-servify-border shadow-sm flex items-start gap-3.5">
+                            <div id="alertBadgeCalidad" class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+                                <span id="alertDotCalidad" class="w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span id="alertTitleCalidad" class="text-xs font-extrabold text-servify-navy">Calidad y Reputación</span>
+                                    <span id="alertTagCalidad" class="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 text-emerald-700 shrink-0">5.0 ★</span>
+                                </div>
+                                <p id="alertDescCalidad" class="text-xs text-servify-muted mt-1 leading-relaxed">Calculando...</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. ANÁLISIS VISUAL (GRÁFICO BARRAS + DONA CON TICKET PROMEDIO + CALIDAD Y REPUTACIÓN) -->
+                <section aria-label="Jerarquía Visual y Gráficos">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xs font-extrabold uppercase tracking-wider text-servify-navy flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-servify-navy"></span>
+                            3. Análisis Visual y Calidad Operativa
+                        </h3>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <!-- Gráfico Izquierdo: Ingresos por plan -->
+                        <div class="lg:col-span-6 bg-white rounded-2xl p-6 border border-servify-border shadow-sm flex flex-col">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                                <div>
+                                    <h4 class="font-display font-extrabold text-base text-servify-navy">¿Cuánto dinero entra por cada plan?</h4>
+                                    <p class="text-xs text-servify-muted">Historial de suscripciones VIP vs. Estándar/Semanal</p>
+                                </div>
+                                <div class="flex items-center gap-3 text-xs">
+                                    <span class="flex items-center gap-1.5 font-bold text-servify-navy">
+                                        <span class="w-3 h-3 rounded-sm bg-servify-gold inline-block"></span> VIP
+                                    </span>
+                                    <span class="flex items-center gap-1.5 font-bold text-servify-navy">
+                                        <span class="w-3 h-3 rounded-sm bg-servify-teal inline-block"></span> Estándar
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="relative h-64 w-full flex-1">
+                                <canvas id="revenueChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Gráfico Derecho: Dona Demanda por categoría + Ticket promedio -->
+                        <div class="lg:col-span-6 bg-servify-navy text-white rounded-2xl p-6 border border-servify-navy shadow-md flex flex-col">
+                            <div class="mb-3">
+                                <h4 class="font-display font-extrabold text-lg text-white">Demanda por categoría</h4>
+                                <p class="text-xs text-slate-300">Pasa el cursor para ver el ticket promedio</p>
+                            </div>
+                            <div class="relative h-56 w-full flex-1 flex items-center justify-center">
+                                <canvas id="categoryDonutChart"></canvas>
+                            </div>
+                            <div id="donutCustomLegend" class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-slate-200"></div>
+                        </div>
+                    </div>
+
+                    <!-- BLOQUE: CALIDAD Y REPUTACIÓN (ÚLTIMAS RESEÑAS + BOTÓN AUDITAR SERVICIO) -->
+                    <div class="mt-6 bg-servify-navy text-white rounded-2xl p-6 border border-servify-navy shadow-md">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                            <div>
+                                <h4 class="font-display font-extrabold text-lg text-white">Calidad y reputación</h4>
+                                <p class="text-xs text-slate-300">Últimas reseñas de clientes a técnicos</p>
+                            </div>
+                            <span id="ratingBadgeHeader" class="px-3 py-1 rounded-full bg-white/10 text-servify-gold text-xs font-extrabold self-start sm:self-auto">
+                                Promedio General: 5.0 ★
+                            </span>
+                        </div>
+
+                        <div id="reviewsListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                            <!-- Renderizado dinámicamente desde la tabla resenas -->
+                        </div>
+                    </div>
+
+                    <!-- TABLA INFERIOR TÁCTICA: LISTA DE TÉCNICOS -->
+                    <div class="mt-6 bg-white rounded-2xl border border-servify-border shadow-sm overflow-hidden">
+                        <div class="p-5 border-b border-servify-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2.5 py-0.5 text-[10px] font-extrabold uppercase rounded-full bg-servify-navy text-white">Detalle Operativo</span>
+                                    <h4 class="font-display font-extrabold text-base text-servify-navy">Lista de Técnicos y su Plan Actual</h4>
+                                </div>
+                                <p class="text-xs text-servify-muted mt-0.5">Datos directos de usuarios con rol técnico en MySQL</p>
+                            </div>
+                            <div class="relative w-full sm:w-72">
+                                <input id="searchTechnician" type="text" placeholder="Buscar por nombre o especialidad..." class="w-full pl-9 pr-3.5 py-2.5 text-xs bg-servify-bg border border-servify-border rounded-xl focus:outline-none focus:border-servify-navy transition">
+                                <svg class="w-4 h-4 text-servify-muted absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-servify-bg border-b border-servify-border text-[11px] font-extrabold uppercase tracking-wider text-servify-muted">
+                                        <th class="py-3.5 px-5">Técnico</th>
+                                        <th class="py-3.5 px-4">Especialidad</th>
+                                        <th class="py-3.5 px-4">Plan Suscrito</th>
+                                        <th class="py-3.5 px-4 text-right">Tarifa Plan</th>
+                                        <th class="py-3.5 px-4 text-center">Trabajos</th>
+                                        <th class="py-3.5 px-4 text-center">Calificación</th>
+                                        <th class="py-3.5 px-5 text-right">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="techniciansTableBody" class="divide-y divide-servify-border text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <footer class="mt-auto px-6 py-6">
+                <div class="max-w-[1600px] mx-auto bg-servify-navy text-white rounded-2xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-servify-teal/20 text-servify-teal flex items-center justify-center shrink-0">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <p class="font-display font-bold text-sm sm:text-base text-white text-center sm:text-left">
+                            “Un buen dashboard responde preguntas empresariales, no es una simple acumulación de datos.”
+                        </p>
+                    </div>
+                    <span class="text-xs font-bold text-servify-teal shrink-0">Servify BI · 2026</span>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        const BREAK_EVEN_TARGET = 2059.75;
+        const DONUT_COLORS = ['#29B6F6', '#34D399', '#FBBF24', '#818CF8', '#F472B6', '#FB923C', '#38BDF8', '#A78BFA'];
+
+        let apiBaseUrl = localStorage.getItem('servify_bi_api') || window.location.origin;
+        if (apiBaseUrl.startsWith('file://')) {
+            apiBaseUrl = 'http://localhost:3000';
+        }
+        let authToken = localStorage.getItem('servify_bi_token') || '';
+
+        let biPayload = null;
+        let currentFilters = { category: 'ALL', plan: 'ALL', search: '' };
+        let revenueChartInstance = null;
+        let categoryDonutInstance = null;
+        let auditingSolicitudId = null;
+
+        function showToast(msg) {
+            const banner = document.getElementById('toastBanner');
+            document.getElementById('toastMessage').textContent = msg;
+            banner.classList.remove('hidden');
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => banner.classList.add('hidden'), 4500);
+        }
+
+        function openAuthModal() {
+            document.getElementById('inputApiBase').value = apiBaseUrl;
+            document.getElementById('authModal').classList.remove('hidden');
+        }
+
+        async function handleAdminLogin() {
+            const baseInput = document.getElementById('inputApiBase').value.trim().replace(/\/$/, '');
+            const correo = document.getElementById('inputLoginEmail').value.trim();
+            const password = document.getElementById('inputLoginPass').value;
+            const errBox = document.getElementById('loginErrorMsg');
+
+            if (!correo || !password) {
+                errBox.textContent = 'Ingresa tu correo y contraseña de administrador.';
+                errBox.classList.remove('hidden');
+                return;
+            }
+
+            errBox.classList.add('hidden');
+            try {
+                const resp = await fetch(`${baseInput}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ correo, password })
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data.token) {
+                    throw new Error(data.mensaje || data.message || 'Credenciales incorrectas');
+                }
+
+                apiBaseUrl = baseInput;
+                authToken = data.token;
+                localStorage.setItem('servify_bi_api', apiBaseUrl);
+                localStorage.setItem('servify_bi_token', authToken);
+                document.getElementById('authModal').classList.add('hidden');
+                await fetchDashboardBIData();
+            } catch (err) {
+                errBox.textContent = err.message;
+                errBox.classList.remove('hidden');
+            }
+        }
+
+        async function fetchDashboardBIData() {
+            if (!authToken) {
+                openAuthModal();
+                return;
+            }
+
+            try {
+                const resp = await fetch(`${apiBaseUrl}/api/admin/dashboard-bi`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                if (resp.status === 401 || resp.status === 403) {
+                    localStorage.removeItem('servify_bi_token');
+                    authToken = '';
+                    openAuthModal();
+                    return;
+                }
+
+                const json = await resp.json();
+                if (!resp.ok || !json.success) {
+                    throw new Error(json.message || 'No se pudieron cargar los datos BI');
+                }
+
+                biPayload = json;
+                document.getElementById('lastSyncTime').textContent = new Date().toLocaleTimeString([], {
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+
+                populateCategoryFilter(json.categorias_demanda || []);
+                renderCharts(json);
+                renderReviews(json.resenas_recientes || [], json.kpis.promedio_rating);
+                updateDashboardUI();
+            } catch (err) {
+                console.error(err);
+                showToast(`Error de conexión: ${err.message}`);
+            }
+        }
+
+        function populateCategoryFilter(categorias) {
+            const select = document.getElementById('filterCategory');
+            const prev = select.value;
+            select.innerHTML = `<option value="ALL">Todas las Categorías (${categorias.length})</option>`;
+            categorias.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.nombre;
+                opt.textContent = `${c.nombre} (${c.total_solicitudes})`;
+                select.appendChild(opt);
+            });
+            if ([...select.options].some(o => o.value === prev)) {
+                select.value = prev;
+            }
+        }
+
+        function renderCharts(data) {
+            // 1. Gráfico de barras de ingresos por plan
+            const labelsRev = data.serie_mensual.length
+                ? data.serie_mensual.map(m => m.etiqueta)
+                : ['Actual'];
+            const vipRev = data.serie_mensual.length
+                ? data.serie_mensual.map(m => m.vip)
+                : [data.kpis.ingresos_vip];
+            const stdRev = data.serie_mensual.length
+                ? data.serie_mensual.map(m => m.estandar)
+                : [data.kpis.ingresos_estandar];
+
+            if (revenueChartInstance) revenueChartInstance.destroy();
+            revenueChartInstance = new Chart(document.getElementById('revenueChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labelsRev,
+                    datasets: [
+                        { label: 'Plan VIP ($6.99)', data: vipRev, backgroundColor: '#FFB300', borderRadius: 6, barPercentage: 0.5 },
+                        { label: 'Plan Estándar ($3.99)', data: stdRev, backgroundColor: '#34D1BF', borderRadius: 6, barPercentage: 0.5 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#0B1F3A',
+                            padding: 12,
+                            cornerRadius: 10,
+                            callbacks: { label: (ctx) => `${ctx.dataset.label}: $${Number(ctx.parsed.y).toFixed(2)}` }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true, grid: { display: false }, ticks: { color: '#6B7C93', font: { weight: '600', size: 11 } } },
+                        y: { stacked: true, border: { display: false }, grid: { color: '#EEF2F6' }, ticks: { color: '#6B7C93', font: { size: 11 }, callback: v => '$' + v } }
+                    }
+                }
+            });
+
+            // 2. Gráfico de dona: Demanda por categoría + Ticket promedio en tooltip
+            const cats = (data.categorias_demanda || []).filter(c => c.total_solicitudes > 0);
+            const donutSource = cats.length ? cats : (data.categorias_demanda || []);
+
+            if (categoryDonutInstance) categoryDonutInstance.destroy();
+            categoryDonutInstance = new Chart(document.getElementById('categoryDonutChart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: donutSource.map(c => c.nombre),
+                    datasets: [{
+                        data: donutSource.map(c => c.total_solicitudes),
+                        backgroundColor: donutSource.map((_, idx) => DONUT_COLORS[idx % DONUT_COLORS.length]),
+                        borderColor: '#0B1F3A',
+                        borderWidth: 3,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '58%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#071529',
+                            borderColor: '#34D1BF',
+                            borderWidth: 1,
+                            padding: 12,
+                            cornerRadius: 10,
+                            callbacks: {
+                                label: (ctx) => {
+                                    const item = donutSource[ctx.dataIndex];
+                                    return [
+                                        ` Solicitudes: ${item.total_solicitudes}`,
+                                        ` Ticket promedio: $${Number(item.ticket_promedio).toFixed(2)}`
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Leyenda inferior limpia igual al diseño
+            const legendBox = document.getElementById('donutCustomLegend');
+            legendBox.innerHTML = donutSource.map((c, idx) => `
+                <span class="inline-flex items-center gap-1.5 font-medium">
+                    <span class="w-4 h-2.5 rounded-sm inline-block" style="background-color:${DONUT_COLORS[idx % DONUT_COLORS.length]}"></span>
+                    <span>${c.nombre}</span>
+                </span>
+            `).join('');
+        }
+
+        function renderReviews(resenas, promedioGlobal) {
+            document.getElementById('ratingBadgeHeader').textContent = `Promedio General: ${Number(promedioGlobal || 5).toFixed(1)} ★`;
+            const container = document.getElementById('reviewsListContainer');
+
+            if (!resenas.length) {
+                container.innerHTML = `
+                    <div class="col-span-full py-6 text-center text-xs text-slate-300 bg-servify-navyLight/60 rounded-2xl border border-white/10">
+                        Aún no hay reseñas registradas por clientes en la base de datos.
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = resenas.map(r => {
+                const esBaja = r.calificacion <= 2;
+                const estrellasHtml = Array.from({ length: 5 }, (_, i) =>
+                    `<span class="${i < r.calificacion ? 'text-amber-400' : 'text-slate-600'}">★</span>`
+                ).join('');
+
+                const cardBorder = esBaja
+                    ? 'border-red-500/70 bg-servify-navyDark/90'
+                    : 'border-white/10 bg-servify-navyDark/70';
+
+                const solTag = r.solicitud_id ? `SOL-${r.solicitud_id}` : `RES-${r.id}`;
+                const yaCancelada = ['cancelado', 'cancelada'].includes((r.solicitud_estado || '').toLowerCase());
+
+                const botonAuditar = (esBaja && r.solicitud_id)
+                    ? (yaCancelada
+                        ? `<span class="mt-2.5 inline-block px-3 py-1 rounded-full text-[11px] font-bold bg-slate-700 text-slate-300">Servicio auditado y dado de baja</span>`
+                        : `<button type="button" onclick="openAuditModal(${r.solicitud_id}, '${escapeHtml(r.cliente_nombre)}', '${escapeHtml(r.tecnico_nombre)}', '${escapeHtml(r.comentario)}')" class="mt-2.5 inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-bold bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 transition cursor-pointer">Auditar servicio</button>`)
+                    : '';
+
+                return `
+                    <div class="rounded-2xl p-4 border ${cardBorder} flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between text-xs mb-2">
+                                <div class="tracking-wider text-sm">${estrellasHtml}</div>
+                                <span class="font-mono text-slate-400 font-semibold">${solTag}</span>
+                            </div>
+                            <p class="text-sm font-semibold text-white leading-snug">${escapeHtml(r.comentario)}</p>
+                            <p class="text-xs text-slate-400 mt-1.5">${escapeHtml(r.cliente_nombre)} sobre ${escapeHtml(r.tecnico_nombre)}</p>
+                        </div>
+                        <div>${botonAuditar}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function openAuditModal(solicitudId, cliente, tecnico, comentario) {
+            auditingSolicitudId = solicitudId;
+            document.getElementById('auditModalTitle').textContent = `Auditar Servicio SOL-${solicitudId}`;
+            document.getElementById('auditModalDesc').textContent = `Reseña de ${cliente} sobre ${tecnico}: "${comentario}"`;
+            document.getElementById('auditReasonInput').value = '';
+            document.getElementById('auditModal').classList.remove('hidden');
+        }
+
+        async function confirmAuditService() {
+            if (!auditingSolicitudId) return;
+            const motivo = document.getElementById('auditReasonInput').value.trim()
+                || 'Servicio auditado por calificación crítica reportada por el cliente.';
+
+            try {
+                const resp = await fetch(`${apiBaseUrl}/api/admin/solicitudes/${auditingSolicitudId}/cancelar`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ motivo })
+                });
+                const json = await resp.json();
+                if (!resp.ok || !json.success) {
+                    throw new Error(json.message || 'No se pudo completar la auditoría');
+                }
+                document.getElementById('auditModal').classList.add('hidden');
+                showToast(`Servicio SOL-${auditingSolicitudId} auditado y dado de baja correctamente.`);
+                await fetchDashboardBIData();
+            } catch (err) {
+                showToast(`Error al auditar: ${err.message}`);
+            }
+        }
+
+        function updateDashboardUI() {
+            if (!biPayload) return;
+            const { kpis, tecnicos } = biPayload;
+
+            // KPIs globales reales
+            document.getElementById('kpiIngresos').textContent = `$${Number(kpis.ingresos_totales).toFixed(2)}`;
+            document.getElementById('kpiIngresosSub').innerHTML =
+                `VIP: <strong class="text-servify-navy">$${Number(kpis.ingresos_vip).toFixed(2)}</strong> · Estándar: <strong class="text-servify-navy">$${Number(kpis.ingresos_estandar).toFixed(2)}</strong>`;
+
+            document.getElementById('kpiTecnicosVip').textContent = kpis.tecnicos_vip;
+            document.getElementById('kpiTotalTecnicos').textContent = `de ${kpis.total_tecnicos} técnicos`;
+
+            document.getElementById('kpiSolicitudes').textContent = kpis.total_solicitudes;
+            document.getElementById('kpiSolicitudesSub').innerHTML =
+                `<strong class="text-amber-600">${kpis.solicitudes_pendientes} pendientes</strong> · <strong class="text-blue-600">${kpis.solicitudes_en_proceso} activas</strong> · <strong class="text-emerald-600">${kpis.solicitudes_completadas} listas</strong>`;
+
+            document.getElementById('kpiUsuariosTotales').textContent = kpis.total_usuarios;
+            document.getElementById('kpiUsuariosSub').innerHTML =
+                `<strong class="text-servify-navy">${kpis.total_tecnicos}</strong> técnicos · <strong class="text-servify-navy">${kpis.total_clientes}</strong> clientes · <strong class="text-servify-navy">${kpis.total_admins}</strong> admin`;
+
+            const roiPct = (Number(kpis.ingresos_totales) / BREAK_EVEN_TARGET) * 100;
+            document.getElementById('kpiRoiPct').textContent = `${roiPct.toFixed(2)}%`;
+            document.getElementById('kpiRoiAcumulado').textContent = `($${Number(kpis.ingresos_totales).toFixed(2)})`;
+            document.getElementById('kpiRoiBar').style.width = `${Math.min(100, Math.max(6, roiPct))}%`;
+
+            // Semáforos reales
+            const pendingRatio = kpis.total_solicitudes > 0
+                ? Math.round((kpis.solicitudes_pendientes / kpis.total_solicitudes) * 100)
+                : 0;
+            document.getElementById('alertTagPendientes').textContent = `${pendingRatio}% SIN ASIGNAR`;
+            document.getElementById('alertDescPendientes').innerHTML =
+                `Hay <strong class="text-servify-navy">${kpis.solicitudes_pendientes} solicitudes pendientes de ${kpis.total_solicitudes}</strong> en total.`;
+
+            const vipShare = kpis.total_tecnicos > 0
+                ? Math.round((kpis.tecnicos_vip / kpis.total_tecnicos) * 100)
+                : 0;
+            document.getElementById('alertTagVip').textContent = `${vipShare}% VIP`;
+            document.getElementById('alertDescVip').innerHTML =
+                `<strong class="text-servify-navy">${kpis.tecnicos_vip} de ${kpis.total_tecnicos}</strong> técnicos cuentan con suscripción activa (meta: 70%).`;
+
+            document.getElementById('alertTagCalidad').textContent = `${Number(kpis.promedio_rating).toFixed(1)} ★`;
+            document.getElementById('alertDescCalidad').innerHTML = kpis.resenas_bajas > 0
+                ? `<strong class="text-red-600">${kpis.resenas_bajas} reseña(s) con ≤ 2 estrellas</strong> requieren auditoría en la sección inferior.`
+                : `Calificación promedio de <strong class="text-servify-navy">${Number(kpis.promedio_rating).toFixed(1)} ★</strong> sin reportes críticos pendientes.`;
+
+            // Filtrado tabla de técnicos
+            const filtered = tecnicos.filter(t => {
+                const matchCat = currentFilters.category === 'ALL' || t.categoria === currentFilters.category;
+                const matchPlan = currentFilters.plan === 'ALL' ||
+                    (currentFilters.plan === 'VIP' && t.es_vip) ||
+                    (currentFilters.plan === 'Estándar' && !t.es_vip);
+                const matchSearch = t.nombre.toLowerCase().includes(currentFilters.search.toLowerCase()) ||
+                    t.categoria.toLowerCase().includes(currentFilters.search.toLowerCase());
+                return matchCat && matchPlan && matchSearch;
+            });
+
+            const tbody = document.getElementById('techniciansTableBody');
+            if (!filtered.length) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-xs text-servify-muted">No hay técnicos que coincidan con el filtro.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(tech => {
+                const planBadge = tech.es_vip
+                    ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">★ ${escapeHtml(tech.plan)}</span>`
+                    : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">Estándar</span>`;
+
+                const statusBadge = tech.estado === 'En proceso'
+                    ? `<span class="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg"><span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>En servicio</span>`
+                    : `<span class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Disponible</span>`;
+
+                return `
+                    <tr class="hover:bg-slate-50/90 transition">
+                        <td class="py-3.5 px-5 font-bold text-servify-navy flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full ${tech.es_vip ? 'bg-servify-navy text-servify-gold' : 'bg-slate-200 text-servify-navy'} flex items-center justify-center text-xs font-extrabold shrink-0">
+                                ${escapeHtml(tech.nombre.charAt(0).toUpperCase())}
+                            </div>
+                            <span>${escapeHtml(tech.nombre)}</span>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-medium text-servify-muted">${escapeHtml(tech.categoria)}</td>
+                        <td class="py-3.5 px-4">${planBadge}</td>
+                        <td class="py-3.5 px-4 text-right font-mono font-bold text-xs text-servify-navy">$${Number(tech.monto).toFixed(2)}</td>
+                        <td class="py-3.5 px-4 text-center font-bold text-xs text-servify-navy">${tech.solicitudes}</td>
+                        <td class="py-3.5 px-4 text-center text-xs font-bold text-amber-600">${Number(tech.rating).toFixed(1)} ★</td>
+                        <td class="py-3.5 px-5 text-right">${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('btnLoginBI').addEventListener('click', handleAdminLogin);
+            document.getElementById('btnLogoutBI').addEventListener('click', () => {
+                localStorage.removeItem('servify_bi_token');
+                authToken = '';
+                openAuthModal();
+            });
+            document.getElementById('btnRefreshData').addEventListener('click', async () => {
+                await fetchDashboardBIData();
+                showToast('Métricas actualizadas desde Aiven MySQL.');
+            });
+
+            document.getElementById('filterCategory').addEventListener('change', (e) => {
+                currentFilters.category = e.target.value;
+                updateDashboardUI();
+            });
+
+            document.getElementById('searchTechnician').addEventListener('input', (e) => {
+                currentFilters.search = e.target.value;
+                updateDashboardUI();
+            });
+
+            document.querySelectorAll('.plan-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.plan-btn').forEach(b => {
+                        b.classList.remove('bg-servify-teal', 'text-servify-navy', 'font-bold');
+                        b.classList.add('text-slate-300', 'font-semibold');
+                    });
+                    btn.classList.add('bg-servify-teal', 'text-servify-navy', 'font-bold');
+                    btn.classList.remove('text-slate-300', 'font-semibold');
+                    currentFilters.plan = btn.dataset.plan;
+                    updateDashboardUI();
+                });
+            });
+
+            document.getElementById('btnCloseAudit').addEventListener('click', () => document.getElementById('auditModal').classList.add('hidden'));
+            document.getElementById('btnCancelAudit').addEventListener('click', () => document.getElementById('auditModal').classList.add('hidden'));
+            document.getElementById('btnConfirmAudit').addEventListener('click', confirmAuditService);
+
+            document.getElementById('btnExportCSV').addEventListener('click', () => {
+                if (!biPayload || !biPayload.tecnicos) return;
+                const headers = ['ID', 'Tecnico', 'Categoria', 'Plan', 'Tarifa_USD', 'Trabajos', 'Calificacion', 'Estado'];
+                const rows = biPayload.tecnicos.map(t => [
+                    t.id, `"${t.nombre}"`, `"${t.categoria}"`, t.plan, Number(t.monto).toFixed(2), t.solicitudes, t.rating, t.estado
+                ]);
+                const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+                const link = document.createElement('a');
+                link.setAttribute('href', encodeURI(csvContent));
+                link.setAttribute('download', 'Servify_BI_Reporte_Real.csv');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast('CSV descargado con datos reales de Servify.');
+            });
+
+            fetchDashboardBIData();
+        });
+    </script>
+</body>
+</html>
