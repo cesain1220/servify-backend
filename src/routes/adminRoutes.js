@@ -1,18 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const verificarToken = require('../middlewares/authMiddleware');
+const { verifyToken, isAdmin } = require('../middlewares/authMiddleware');
 
-// Métricas generales y Dashboard BI Ejecutivo
-router.get('/dashboard', verificarToken, adminController.getDashboardStats);
-router.get('/dashboard-bi', verificarToken, adminController.getDashboardBI);
+// Todas las rutas de administración requieren token válido y rol admin
+router.get('/stats', verifyToken, isAdmin, adminController.getDashboardStats);
+router.get('/dashboard-bi', verifyToken, isAdmin, adminController.getDashboardBI);
 
-// Gestión de usuarios
-router.get('/usuarios', verificarToken, adminController.getUsuarios);
-router.put('/usuarios/:id/rol', verificarToken, adminController.cambiarRolUsuario);
+// Gestión de usuarios, roles y suspensiones (ban)
+router.get('/usuarios', verifyToken, isAdmin, adminController.getUsuarios);
+router.put('/usuarios/:id/rol', verifyToken, isAdmin, adminController.cambiarRolUsuario);
+router.put('/usuarios/:id/ban', verifyToken, isAdmin, adminController.toggleBanUsuario);
 
-// Moderación y auditoría de solicitudes
-router.get('/solicitudes', verificarToken, adminController.getSolicitudesAdmin);
-router.put('/solicitudes/:id/cancelar', verificarToken, adminController.cancelarSolicitudAdmin);
+// Moderación de solicitudes / peticiones
+router.get('/solicitudes', verifyToken, isAdmin, adminController.getSolicitudesAdmin);
+router.put('/solicitudes/:id/cancelar', verifyToken, isAdmin, adminController.cancelarSolicitudAdmin);
 
 module.exports = router;

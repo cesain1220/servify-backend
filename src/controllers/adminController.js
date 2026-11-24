@@ -438,3 +438,58 @@ exports.cancelarSolicitudAdmin = async (req, res) => {
     });
   }
 };
+
+// 6. Banear o reactivar un usuario en la plataforma
+exports.toggleBanUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { banear, motivo } = req.body;
+    const razon = (motivo && motivo.trim()) ? motivo.trim() : 'Incumplimiento de términos y condiciones de Servify';
+
+    const [[usuario]] = await db.query('SELECT id, nombre, rol FROM usuarios WHERE id = ?', [id]);
+    if (!usuario) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+
+    if (String(usuario.id) === String(req.user?.id)) {
+      return res.status(400).json({ success: false, message: 'No puedes banear tu propia cuenta de administrador' });
+    }
+
+    const nuevoRol = banear ? 'baneado' : 'cliente';
+
+    try {
+      await db.query('UPDATE usuarios SET rol = ? WHERE id = ?', [nuevoRol, id]);
+    } catch (enumErr) {
+      await db.query('UPDATE usuarios SET activo = ? WHERE id = ?', [banear ? 0 : 1, id]);
+    }
+
+    try {
+      await db.query(
+        `INSERT INTO notificaciones (usuario_id, titulo, mensaje, leida, creado_en)
+         VALUES (?, ?, ?, 0, NOW())`,
+        [
+          id,
+          banear ? 'Cuenta suspendida' : 'Cuenta reactivada',
+          banear
+            ? `Tu cuenta fue suspendida por administración. Motivo: ${razon}`
+            : 'Tu cuenta ha sido reactivada por el equipo de administración.'
+        ]
+      );
+    } catch (notifErr) {
+      console.log('Aviso notificación ban:', notifErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: banear
+        ? `Usuario ${usuario.nombre} suspendido correctamente`
+        : `Usuario ${usuario.nombre} reactivado correctamente`
+    });
+  } catch (error) {
+    console.error('Error al cambiar estado de ban:', error);
+    return res.status(500).json({
+      success: false,
+      message: `Error al actualizar estado del usuario: ${error.message}`
+    });
+  }
+};
