@@ -68,7 +68,7 @@ exports.getDashboardBI = async (req, res) => {
       FROM usuarios
     `);
 
-    // B. Ingresos reales desde suscripciones_vip (y fallback a pagos_servicios si aplica)
+    // B. Ingresos reales desde suscripciones_vip
     let ingresosTotales = 0;
     let ingresosVip = 0;
     let ingresosEstandar = 0;
@@ -108,7 +108,7 @@ exports.getDashboardBI = async (req, res) => {
       console.log('Aviso suscripciones_vip:', subErr.message);
     }
 
-    // C. Solicitudes globales
+    // C. Solicitudes globales y desglosadas por categoría para filtrado reactivo
     const [[solStats]] = await db.query(`
       SELECT 
         COUNT(*) AS total,
@@ -117,6 +117,19 @@ exports.getDashboardBI = async (req, res) => {
         SUM(CASE WHEN LOWER(estado) IN ('completada', 'completado') THEN 1 ELSE 0 END) AS completadas,
         SUM(CASE WHEN LOWER(estado) IN ('cancelada', 'cancelado', 'rechazada', 'rechazado') THEN 1 ELSE 0 END) AS canceladas
       FROM solicitudes
+    `);
+
+    const [solicitudesPorCatRows] = await db.query(`
+      SELECT 
+        COALESCE(c.nombre, 'General') AS categoria,
+        COUNT(s.id) AS total,
+        SUM(CASE WHEN LOWER(s.estado) IN ('pendiente', 'directa') THEN 1 ELSE 0 END) AS pendientes,
+        SUM(CASE WHEN LOWER(s.estado) IN ('en_proceso', 'aceptada', 'aceptado', 'esperando_pago', 'pendiente_pago', 'en_cierre') THEN 1 ELSE 0 END) AS en_proceso,
+        SUM(CASE WHEN LOWER(s.estado) IN ('completada', 'completado') THEN 1 ELSE 0 END) AS completadas,
+        SUM(CASE WHEN LOWER(s.estado) IN ('cancelada', 'cancelado', 'rechazada', 'rechazado') THEN 1 ELSE 0 END) AS canceladas
+      FROM solicitudes s
+      LEFT JOIN categorias c ON s.categoria_id = c.id
+      GROUP BY COALESCE(c.nombre, 'General')
     `);
 
     // D. Demanda por categoría + Ticket promedio (para el gráfico de dona)
@@ -132,7 +145,7 @@ exports.getDashboardBI = async (req, res) => {
       ORDER BY total_solicitudes DESC, c.nombre ASC
     `);
 
-    // E. Calidad y reputación (Últimas reseñas reales)
+    // E. Calidad y reputación (Últimas reseñas reales con su categoría)
     let resenasRecientes = [];
     let promedioGlobalRating = 5.0;
     let totalResenasBajas = 0;
@@ -156,13 +169,15 @@ exports.getDashboardBI = async (req, res) => {
           r.creado_en,
           autor.nombre AS cliente_nombre,
           dest.nombre AS tecnico_nombre,
-          s.estado AS solicitud_estado
+          s.estado AS solicitud_estado,
+          COALESCE(c.nombre, 'General') AS categoria
         FROM resenas r
         JOIN usuarios autor ON r.autor_id = autor.id
         JOIN usuarios dest ON r.destinatario_id = dest.id
         LEFT JOIN solicitudes s ON r.solicitud_id = s.id
+        LEFT JOIN categorias c ON s.categoria_id = c.id
         ORDER BY r.creado_en DESC
-        LIMIT 8
+        LIMIT 25
       `);
 
       resenasRecientes = resenasRows.map(r => ({
@@ -173,6 +188,7 @@ exports.getDashboardBI = async (req, res) => {
         cliente_nombre: r.cliente_nombre || 'Cliente',
         tecnico_nombre: r.tecnico_nombre || 'Técnico',
         solicitud_estado: r.solicitud_estado || 'completado',
+        categoria: r.categoria || 'General',
         creado_en: r.creado_en
       }));
     } catch (revErr) {
@@ -248,6 +264,14 @@ exports.getDashboardBI = async (req, res) => {
         promedio_rating: promedioGlobalRating,
         resenas_bajas: totalResenasBajas
       },
+      solicitudes_por_categoria: solicitudesPorCatRows.map(s => ({
+        categoria: s.categoria,
+        total: Number(s.total || 0),
+        pendientes: Number(s.pendientes || 0),
+        en_proceso: Number(s.en_proceso || 0),
+        completadas: Number(s.completadas || 0),
+        canceladas: Number(s.canceladas || 0)
+      })),
       serie_mensual: serieMensual,
       categorias_demanda: categoriasDemanda.map(c => ({
         id: Number(c.id),

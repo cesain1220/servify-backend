@@ -58,7 +58,7 @@
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-servify-teal selection:text-servify-navy">
 
-    <!-- MODAL DE INICIO DE SESIÓN ADMIN (Solo aparece si no hay token guardado) -->
+    <!-- MODAL DE INICIO DE SESIÓN ADMIN -->
     <div id="authModal" class="hidden fixed inset-0 z-50 bg-servify-navyDark/85 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl max-w-md w-full p-7 shadow-2xl border border-servify-border space-y-5">
             <div class="flex items-center gap-3">
@@ -92,7 +92,7 @@
         </div>
     </div>
 
-    <!-- MODAL DE AUDITORÍA DE SERVICIO (Para reseñas con calificación baja) -->
+    <!-- MODAL DE AUDITORÍA DE SERVICIO -->
     <div id="auditModal" class="hidden fixed inset-0 z-50 bg-servify-navyDark/75 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-servify-border space-y-4">
             <div class="flex items-center justify-between">
@@ -159,6 +159,10 @@
                             <button type="button" data-plan="Estándar" class="plan-btn py-1.5 text-xs font-semibold rounded-lg text-slate-300 hover:text-white transition cursor-pointer">Estándar</button>
                         </div>
                     </div>
+
+                    <button id="btnClearFilters" type="button" class="hidden w-full py-2 rounded-xl bg-servify-gold/20 hover:bg-servify-gold/30 text-servify-gold border border-servify-gold/40 text-xs font-bold transition cursor-pointer">
+                        ✕ Limpiar filtros activos
+                    </button>
                 </div>
 
                 <!-- Estado Conexión MySQL -->
@@ -206,7 +210,7 @@
                 <div>
                     <div class="flex items-center gap-2">
                         <span class="px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider rounded-full bg-servify-teal/20 text-servify-teal lg:bg-servify-navy lg:text-white">Servify Admin BI</span>
-                        <span class="text-xs text-slate-300 lg:text-servify-muted font-medium">Datos en tiempo real desde MySQL</span>
+                        <span id="activeScopeBadge" class="text-xs text-slate-300 lg:text-servify-muted font-semibold">Vista Global (Todas las categorías)</span>
                     </div>
                     <h2 class="font-display text-xl sm:text-2xl font-extrabold mt-1">
                         Resultados y Métricas Clave de Servify
@@ -247,7 +251,7 @@
                             <span class="w-2.5 h-2.5 rounded-full bg-servify-teal"></span>
                             1. Las 5 Métricas Vitales del Negocio
                         </h3>
-                        <span class="text-xs text-servify-muted font-medium">Lectura en vivo de servify_db</span>
+                        <span id="kpiScopeHint" class="text-xs text-servify-muted font-medium">Lectura en vivo de servify_db</span>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
@@ -255,12 +259,12 @@
                         <div class="bg-white rounded-2xl p-5 border border-servify-border shadow-sm flex flex-col justify-between relative overflow-hidden">
                             <div>
                                 <div class="flex items-center justify-between gap-2">
-                                    <span class="text-xs font-bold text-servify-muted">Dinero Recaudado</span>
+                                    <span id="kpiIngresosTitle" class="text-xs font-bold text-servify-muted">Dinero Recaudado</span>
                                     <span class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-extrabold text-base">$</span>
                                 </div>
                                 <div class="mt-3 flex items-baseline gap-2">
                                     <span id="kpiIngresos" class="font-display text-3xl font-extrabold text-servify-navy">$0.00</span>
-                                    <span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">real</span>
+                                    <span id="kpiIngresosBadge" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">real</span>
                                 </div>
                             </div>
                             <p id="kpiIngresosSub" class="text-xs text-servify-muted mt-3 pt-2.5 border-t border-servify-border leading-snug">
@@ -281,7 +285,7 @@
                                     <span id="kpiTotalTecnicos" class="text-sm font-bold text-servify-muted">de 0 técnicos</span>
                                 </div>
                             </div>
-                            <p class="text-xs text-servify-muted mt-3 pt-2.5 border-t border-servify-border leading-snug">
+                            <p id="kpiVipSub" class="text-xs text-servify-muted mt-3 pt-2.5 border-t border-servify-border leading-snug">
                                 Con membresía activa en la plataforma
                             </p>
                             <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-servify-gold"></div>
@@ -311,14 +315,14 @@
                         <div class="bg-white rounded-2xl p-5 border border-servify-border shadow-sm flex flex-col justify-between relative overflow-hidden">
                             <div>
                                 <div class="flex items-center justify-between gap-2">
-                                    <span class="text-xs font-bold text-servify-muted">Usuarios en la App</span>
+                                    <span id="kpiUsuariosTitle" class="text-xs font-bold text-servify-muted">Usuarios en la App</span>
                                     <span class="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                                     </span>
                                 </div>
                                 <div class="mt-3 flex items-baseline gap-2">
                                     <span id="kpiUsuariosTotales" class="font-display text-3xl font-extrabold text-servify-navy">0</span>
-                                    <span class="text-sm font-bold text-servify-muted">registrados</span>
+                                    <span id="kpiUsuariosUnit" class="text-sm font-bold text-servify-muted">registrados</span>
                                 </div>
                             </div>
                             <p id="kpiUsuariosSub" class="text-xs text-servify-muted mt-3 pt-2.5 border-t border-servify-border leading-snug">
@@ -331,7 +335,7 @@
                         <div class="bg-servify-navy text-white rounded-2xl p-5 border border-servify-navy shadow-md flex flex-col justify-between relative overflow-hidden sm:col-span-2 lg:col-span-1">
                             <div>
                                 <div class="flex items-center justify-between gap-2">
-                                    <span class="text-xs font-bold text-slate-300">Recuperar Inversión</span>
+                                    <span id="kpiRoiTitle" class="text-xs font-bold text-slate-300">Recuperar Inversión</span>
                                     <span class="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-servify-gold/20 text-servify-gold border border-servify-gold/30">Meta $2,059.75</span>
                                 </div>
                                 <div class="mt-3 flex items-baseline gap-2">
@@ -343,7 +347,7 @@
                                 <div class="w-full h-2 bg-white/15 rounded-full overflow-hidden">
                                     <div id="kpiRoiBar" class="h-full bg-gradient-to-r from-servify-teal to-servify-gold rounded-full transition-all duration-500" style="width: 6%;"></div>
                                 </div>
-                                <p class="text-[11px] text-slate-300 mt-1.5">Avance real hacia punto de equilibrio</p>
+                                <p id="kpiRoiSub" class="text-[11px] text-slate-300 mt-1.5">Avance real hacia punto de equilibrio</p>
                             </div>
                         </div>
                     </div>
@@ -400,7 +404,7 @@
                     </div>
                 </section>
 
-                <!-- 3. ANÁLISIS VISUAL (GRÁFICO BARRAS + DONA CON TICKET PROMEDIO + CALIDAD Y REPUTACIÓN) -->
+                <!-- 3. ANÁLISIS VISUAL -->
                 <section aria-label="Jerarquía Visual y Gráficos">
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="text-xs font-extrabold uppercase tracking-wider text-servify-navy flex items-center gap-2">
@@ -414,8 +418,8 @@
                         <div class="lg:col-span-6 bg-white rounded-2xl p-6 border border-servify-border shadow-sm flex flex-col">
                             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                                 <div>
-                                    <h4 class="font-display font-extrabold text-base text-servify-navy">¿Cuánto dinero entra por cada plan?</h4>
-                                    <p class="text-xs text-servify-muted">Historial de suscripciones VIP vs. Estándar/Semanal</p>
+                                    <h4 id="revenueChartTitle" class="font-display font-extrabold text-base text-servify-navy">¿Cuánto dinero entra por cada plan?</h4>
+                                    <p id="revenueChartSub" class="text-xs text-servify-muted">Historial de suscripciones VIP vs. Estándar/Semanal</p>
                                 </div>
                                 <div class="flex items-center gap-3 text-xs">
                                     <span class="flex items-center gap-1.5 font-bold text-servify-navy">
@@ -434,8 +438,8 @@
                         <!-- Gráfico Derecho: Dona Demanda por categoría + Ticket promedio -->
                         <div class="lg:col-span-6 bg-servify-navy text-white rounded-2xl p-6 border border-servify-navy shadow-md flex flex-col">
                             <div class="mb-3">
-                                <h4 class="font-display font-extrabold text-lg text-white">Demanda por categoría</h4>
-                                <p class="text-xs text-slate-300">Pasa el cursor para ver el ticket promedio</p>
+                                <h4 id="donutChartTitle" class="font-display font-extrabold text-lg text-white">Demanda por categoría</h4>
+                                <p id="donutChartSub" class="text-xs text-slate-300">Pasa el cursor para ver el ticket promedio</p>
                             </div>
                             <div class="relative h-56 w-full flex-1 flex items-center justify-center">
                                 <canvas id="categoryDonutChart"></canvas>
@@ -444,21 +448,19 @@
                         </div>
                     </div>
 
-                    <!-- BLOQUE: CALIDAD Y REPUTACIÓN (ÚLTIMAS RESEÑAS + BOTÓN AUDITAR SERVICIO) -->
+                    <!-- BLOQUE: CALIDAD Y REPUTACIÓN -->
                     <div class="mt-6 bg-servify-navy text-white rounded-2xl p-6 border border-servify-navy shadow-md">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                             <div>
                                 <h4 class="font-display font-extrabold text-lg text-white">Calidad y reputación</h4>
-                                <p class="text-xs text-slate-300">Últimas reseñas de clientes a técnicos</p>
+                                <p id="reviewsSectionSub" class="text-xs text-slate-300">Últimas reseñas de clientes a técnicos</p>
                             </div>
                             <span id="ratingBadgeHeader" class="px-3 py-1 rounded-full bg-white/10 text-servify-gold text-xs font-extrabold self-start sm:self-auto">
                                 Promedio General: 5.0 ★
                             </span>
                         </div>
 
-                        <div id="reviewsListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                            <!-- Renderizado dinámicamente desde la tabla resenas -->
-                        </div>
+                        <div id="reviewsListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3.5"></div>
                     </div>
 
                     <!-- TABLA INFERIOR TÁCTICA: LISTA DE TÉCNICOS -->
@@ -467,9 +469,9 @@
                             <div>
                                 <div class="flex items-center gap-2">
                                     <span class="px-2.5 py-0.5 text-[10px] font-extrabold uppercase rounded-full bg-servify-navy text-white">Detalle Operativo</span>
-                                    <h4 class="font-display font-extrabold text-base text-servify-navy">Lista de Técnicos y su Plan Actual</h4>
+                                    <h4 id="techTableTitle" class="font-display font-extrabold text-base text-servify-navy">Lista de Técnicos y su Plan Actual</h4>
                                 </div>
-                                <p class="text-xs text-servify-muted mt-0.5">Datos directos de usuarios con rol técnico en MySQL</p>
+                                <p id="techTableSub" class="text-xs text-servify-muted mt-0.5">Datos directos de usuarios con rol técnico en MySQL</p>
                             </div>
                             <div class="relative w-full sm:w-72">
                                 <input id="searchTechnician" type="text" placeholder="Buscar por nombre o especialidad..." class="w-full pl-9 pr-3.5 py-2.5 text-xs bg-servify-bg border border-servify-border rounded-xl focus:outline-none focus:border-servify-navy transition">
@@ -607,8 +609,6 @@
                 });
 
                 populateCategoryFilter(json.categorias_demanda || []);
-                renderCharts(json);
-                renderReviews(json.resenas_recientes || [], json.kpis.promedio_rating);
                 updateDashboardUI();
             } catch (err) {
                 console.error(err);
@@ -631,17 +631,27 @@
             }
         }
 
-        function renderCharts(data) {
+        function renderChartsFiltered(data, filteredTechs, ingresosVipFiltrado, ingresosStdFiltrado) {
+            const isFiltered = currentFilters.category !== 'ALL' || currentFilters.plan !== 'ALL';
+
             // 1. Gráfico de barras de ingresos por plan
-            const labelsRev = data.serie_mensual.length
-                ? data.serie_mensual.map(m => m.etiqueta)
-                : ['Actual'];
-            const vipRev = data.serie_mensual.length
-                ? data.serie_mensual.map(m => m.vip)
-                : [data.kpis.ingresos_vip];
-            const stdRev = data.serie_mensual.length
-                ? data.serie_mensual.map(m => m.estandar)
-                : [data.kpis.ingresos_estandar];
+            let labelsRev, vipRev, stdRev;
+            if (!isFiltered && data.serie_mensual && data.serie_mensual.length) {
+                document.getElementById('revenueChartTitle').textContent = '¿Cuánto dinero entra por cada plan?';
+                document.getElementById('revenueChartSub').textContent = 'Historial de suscripciones VIP vs. Estándar/Semanal';
+                labelsRev = data.serie_mensual.map(m => m.etiqueta);
+                vipRev = data.serie_mensual.map(m => m.vip);
+                stdRev = data.serie_mensual.map(m => m.estandar);
+            } else {
+                const labelScope = currentFilters.category !== 'ALL'
+                    ? currentFilters.category
+                    : `Plan ${currentFilters.plan}`;
+                document.getElementById('revenueChartTitle').textContent = `Ingresos por plan — ${labelScope}`;
+                document.getElementById('revenueChartSub').textContent = 'Comparativa directa VIP ($6.99) vs. Estándar ($3.99) del filtro activo';
+                labelsRev = [labelScope];
+                vipRev = [ingresosVipFiltrado];
+                stdRev = [ingresosStdFiltrado];
+            }
 
             if (revenueChartInstance) revenueChartInstance.destroy();
             revenueChartInstance = new Chart(document.getElementById('revenueChart').getContext('2d'), {
@@ -649,8 +659,8 @@
                 data: {
                     labels: labelsRev,
                     datasets: [
-                        { label: 'Plan VIP ($6.99)', data: vipRev, backgroundColor: '#FFB300', borderRadius: 6, barPercentage: 0.5 },
-                        { label: 'Plan Estándar ($3.99)', data: stdRev, backgroundColor: '#34D1BF', borderRadius: 6, barPercentage: 0.5 }
+                        { label: 'Plan VIP ($6.99)', data: vipRev, backgroundColor: '#FFB300', borderRadius: 6, barPercentage: 0.45 },
+                        { label: 'Plan Estándar ($3.99)', data: stdRev, backgroundColor: '#34D1BF', borderRadius: 6, barPercentage: 0.45 }
                     ]
                 },
                 options: {
@@ -666,79 +676,153 @@
                         }
                     },
                     scales: {
-                        x: { stacked: true, grid: { display: false }, ticks: { color: '#6B7C93', font: { weight: '600', size: 11 } } },
-                        y: { stacked: true, border: { display: false }, grid: { color: '#EEF2F6' }, ticks: { color: '#6B7C93', font: { size: 11 }, callback: v => '$' + v } }
+                        x: { stacked: !isFiltered, grid: { display: false }, ticks: { color: '#6B7C93', font: { weight: '600', size: 11 } } },
+                        y: { stacked: !isFiltered, border: { display: false }, grid: { color: '#EEF2F6' }, ticks: { color: '#6B7C93', font: { size: 11 }, callback: v => '$' + v } }
                     }
                 }
             });
 
-            // 2. Gráfico de dona: Demanda por categoría + Ticket promedio en tooltip
-            const cats = (data.categorias_demanda || []).filter(c => c.total_solicitudes > 0);
-            const donutSource = cats.length ? cats : (data.categorias_demanda || []);
-
+            // 2. Gráfico de dona: Demanda por categoría (si hay categoría filtrada, muestra el desglose de estados de esa categoría)
             if (categoryDonutInstance) categoryDonutInstance.destroy();
-            categoryDonutInstance = new Chart(document.getElementById('categoryDonutChart').getContext('2d'), {
-                type: 'doughnut',
-                data: {
-                    labels: donutSource.map(c => c.nombre),
-                    datasets: [{
-                        data: donutSource.map(c => c.total_solicitudes),
-                        backgroundColor: donutSource.map((_, idx) => DONUT_COLORS[idx % DONUT_COLORS.length]),
-                        borderColor: '#0B1F3A',
-                        borderWidth: 3,
-                        hoverOffset: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '58%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: '#071529',
-                            borderColor: '#34D1BF',
-                            borderWidth: 1,
-                            padding: 12,
-                            cornerRadius: 10,
-                            callbacks: {
-                                label: (ctx) => {
-                                    const item = donutSource[ctx.dataIndex];
-                                    return [
-                                        ` Solicitudes: ${item.total_solicitudes}`,
-                                        ` Ticket promedio: $${Number(item.ticket_promedio).toFixed(2)}`
-                                    ];
+
+            if (currentFilters.category === 'ALL') {
+                document.getElementById('donutChartTitle').textContent = 'Demanda por categoría';
+                document.getElementById('donutChartSub').textContent = 'Pasa el cursor para ver el ticket promedio';
+
+                const cats = (data.categorias_demanda || []).filter(c => c.total_solicitudes > 0);
+                const donutSource = cats.length ? cats : (data.categorias_demanda || []);
+
+                categoryDonutInstance = new Chart(document.getElementById('categoryDonutChart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: donutSource.map(c => c.nombre),
+                        datasets: [{
+                            data: donutSource.map(c => c.total_solicitudes),
+                            backgroundColor: donutSource.map((_, idx) => DONUT_COLORS[idx % DONUT_COLORS.length]),
+                            borderColor: '#0B1F3A',
+                            borderWidth: 3,
+                            hoverOffset: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '58%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#071529',
+                                borderColor: '#34D1BF',
+                                borderWidth: 1,
+                                padding: 12,
+                                cornerRadius: 10,
+                                callbacks: {
+                                    label: (ctx) => {
+                                        const item = donutSource[ctx.dataIndex];
+                                        return [
+                                            ` Solicitudes: ${item.total_solicitudes}`,
+                                            ` Ticket promedio: $${Number(item.ticket_promedio).toFixed(2)}`
+                                        ];
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
 
-            // Leyenda inferior limpia igual al diseño
-            const legendBox = document.getElementById('donutCustomLegend');
-            legendBox.innerHTML = donutSource.map((c, idx) => `
-                <span class="inline-flex items-center gap-1.5 font-medium">
-                    <span class="w-4 h-2.5 rounded-sm inline-block" style="background-color:${DONUT_COLORS[idx % DONUT_COLORS.length]}"></span>
-                    <span>${c.nombre}</span>
-                </span>
-            `).join('');
+                document.getElementById('donutCustomLegend').innerHTML = donutSource.map((c, idx) => `
+                    <span class="inline-flex items-center gap-1.5 font-medium">
+                        <span class="w-4 h-2.5 rounded-sm inline-block" style="background-color:${DONUT_COLORS[idx % DONUT_COLORS.length]}"></span>
+                        <span>${c.nombre}</span>
+                    </span>
+                `).join('');
+            } else {
+                const catInfo = (data.categorias_demanda || []).find(c => c.nombre === currentFilters.category) || { ticket_promedio: 0 };
+                const solCat = (data.solicitudes_por_categoria || []).find(s => s.categoria === currentFilters.category) || {
+                    pendientes: 0, en_proceso: 0, completadas: 0, canceladas: 0
+                };
+
+                document.getElementById('donutChartTitle').textContent = `Detalle de ${currentFilters.category}`;
+                document.getElementById('donutChartSub').textContent = `Ticket promedio en esta categoría: $${Number(catInfo.ticket_promedio || 0).toFixed(2)}`;
+
+                const estadosLabels = ['Pendientes', 'En marcha', 'Completadas', 'Canceladas'];
+                const estadosValores = [solCat.pendientes, solCat.en_proceso, solCat.completadas, solCat.canceladas];
+                const estadosColores = ['#FBBF24', '#29B6F6', '#34D399', '#F472B6'];
+
+                categoryDonutInstance = new Chart(document.getElementById('categoryDonutChart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: estadosLabels,
+                        datasets: [{
+                            data: estadosValores,
+                            backgroundColor: estadosColores,
+                            borderColor: '#0B1F3A',
+                            borderWidth: 3,
+                            hoverOffset: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '58%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#071529',
+                                borderColor: '#34D1BF',
+                                borderWidth: 1,
+                                padding: 12,
+                                cornerRadius: 10,
+                                callbacks: {
+                                    label: (ctx) => [
+                                        ` ${ctx.label}: ${ctx.parsed} solicitudes`,
+                                        ` Ticket promedio: $${Number(catInfo.ticket_promedio || 0).toFixed(2)}`
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                });
+
+                document.getElementById('donutCustomLegend').innerHTML = estadosLabels.map((lbl, idx) => `
+                    <span class="inline-flex items-center gap-1.5 font-medium">
+                        <span class="w-4 h-2.5 rounded-sm inline-block" style="background-color:${estadosColores[idx]}"></span>
+                        <span>${lbl} (${estadosValores[idx]})</span>
+                    </span>
+                `).join('');
+            }
         }
 
-        function renderReviews(resenas, promedioGlobal) {
-            document.getElementById('ratingBadgeHeader').textContent = `Promedio General: ${Number(promedioGlobal || 5).toFixed(1)} ★`;
+        function renderReviews(resenas) {
+            const filtradas = resenas.filter(r =>
+                currentFilters.category === 'ALL' ||
+                (r.categoria || '').toLowerCase() === currentFilters.category.toLowerCase()
+            );
+
+            const promedioMostrado = filtradas.length
+                ? (filtradas.reduce((acc, r) => acc + r.calificacion, 0) / filtradas.length)
+                : (biPayload?.kpis?.promedio_rating || 5.0);
+
+            document.getElementById('ratingBadgeHeader').textContent = currentFilters.category === 'ALL'
+                ? `Promedio General: ${Number(promedioMostrado).toFixed(1)} ★`
+                : `Promedio en ${currentFilters.category}: ${Number(promedioMostrado).toFixed(1)} ★`;
+
+            document.getElementById('reviewsSectionSub').textContent = currentFilters.category === 'ALL'
+                ? 'Últimas reseñas de clientes a técnicos'
+                : `Reseñas registradas en la categoría ${currentFilters.category}`;
+
             const container = document.getElementById('reviewsListContainer');
 
-            if (!resenas.length) {
+            if (!filtradas.length) {
                 container.innerHTML = `
                     <div class="col-span-full py-6 text-center text-xs text-slate-300 bg-servify-navyLight/60 rounded-2xl border border-white/10">
-                        Aún no hay reseñas registradas por clientes en la base de datos.
+                        No hay reseñas registradas para ${currentFilters.category === 'ALL' ? 'mostrar' : currentFilters.category}.
                     </div>
                 `;
                 return;
             }
 
-            container.innerHTML = resenas.map(r => {
+            container.innerHTML = filtradas.map(r => {
                 const esBaja = r.calificacion <= 2;
                 const estrellasHtml = Array.from({ length: 5 }, (_, i) =>
                     `<span class="${i < r.calificacion ? 'text-amber-400' : 'text-slate-600'}">★</span>`
@@ -762,7 +846,7 @@
                         <div>
                             <div class="flex items-center justify-between text-xs mb-2">
                                 <div class="tracking-wider text-sm">${estrellasHtml}</div>
-                                <span class="font-mono text-slate-400 font-semibold">${solTag}</span>
+                                <span class="font-mono text-slate-400 font-semibold">${solTag} · ${escapeHtml(r.categoria)}</span>
                             </div>
                             <p class="text-sm font-semibold text-white leading-snug">${escapeHtml(r.comentario)}</p>
                             <p class="text-xs text-slate-400 mt-1.5">${escapeHtml(r.cliente_nombre)} sobre ${escapeHtml(r.tecnico_nombre)}</p>
@@ -818,67 +902,156 @@
 
         function updateDashboardUI() {
             if (!biPayload) return;
-            const { kpis, tecnicos } = biPayload;
+            const { kpis, tecnicos, solicitudes_por_categoria = [], resenas_recientes = [] } = biPayload;
 
-            // KPIs globales reales
-            document.getElementById('kpiIngresos').textContent = `$${Number(kpis.ingresos_totales).toFixed(2)}`;
-            document.getElementById('kpiIngresosSub').innerHTML =
-                `VIP: <strong class="text-servify-navy">$${Number(kpis.ingresos_vip).toFixed(2)}</strong> · Estándar: <strong class="text-servify-navy">$${Number(kpis.ingresos_estandar).toFixed(2)}</strong>`;
+            const isCatFiltered = currentFilters.category !== 'ALL';
+            const isPlanFiltered = currentFilters.plan !== 'ALL';
+            const hasAnyFilter = isCatFiltered || isPlanFiltered;
 
-            document.getElementById('kpiTecnicosVip').textContent = kpis.tecnicos_vip;
-            document.getElementById('kpiTotalTecnicos').textContent = `de ${kpis.total_tecnicos} técnicos`;
+            document.getElementById('btnClearFilters').classList.toggle('hidden', !hasAnyFilter);
 
-            document.getElementById('kpiSolicitudes').textContent = kpis.total_solicitudes;
-            document.getElementById('kpiSolicitudesSub').innerHTML =
-                `<strong class="text-amber-600">${kpis.solicitudes_pendientes} pendientes</strong> · <strong class="text-blue-600">${kpis.solicitudes_en_proceso} activas</strong> · <strong class="text-emerald-600">${kpis.solicitudes_completadas} listas</strong>`;
+            // Actualizar badge de alcance en header
+            const scopeParts = [];
+            if (isCatFiltered) scopeParts.push(`Categoría: ${currentFilters.category}`);
+            if (isPlanFiltered) scopeParts.push(`Plan: ${currentFilters.plan}`);
+            document.getElementById('activeScopeBadge').textContent = scopeParts.length
+                ? `Filtrado por ${scopeParts.join(' · ')}`
+                : 'Vista Global (Todas las categorías)';
 
-            document.getElementById('kpiUsuariosTotales').textContent = kpis.total_usuarios;
-            document.getElementById('kpiUsuariosSub').innerHTML =
-                `<strong class="text-servify-navy">${kpis.total_tecnicos}</strong> técnicos · <strong class="text-servify-navy">${kpis.total_clientes}</strong> clientes · <strong class="text-servify-navy">${kpis.total_admins}</strong> admin`;
-
-            const roiPct = (Number(kpis.ingresos_totales) / BREAK_EVEN_TARGET) * 100;
-            document.getElementById('kpiRoiPct').textContent = `${roiPct.toFixed(2)}%`;
-            document.getElementById('kpiRoiAcumulado').textContent = `($${Number(kpis.ingresos_totales).toFixed(2)})`;
-            document.getElementById('kpiRoiBar').style.width = `${Math.min(100, Math.max(6, roiPct))}%`;
-
-            // Semáforos reales
-            const pendingRatio = kpis.total_solicitudes > 0
-                ? Math.round((kpis.solicitudes_pendientes / kpis.total_solicitudes) * 100)
-                : 0;
-            document.getElementById('alertTagPendientes').textContent = `${pendingRatio}% SIN ASIGNAR`;
-            document.getElementById('alertDescPendientes').innerHTML =
-                `Hay <strong class="text-servify-navy">${kpis.solicitudes_pendientes} solicitudes pendientes de ${kpis.total_solicitudes}</strong> en total.`;
-
-            const vipShare = kpis.total_tecnicos > 0
-                ? Math.round((kpis.tecnicos_vip / kpis.total_tecnicos) * 100)
-                : 0;
-            document.getElementById('alertTagVip').textContent = `${vipShare}% VIP`;
-            document.getElementById('alertDescVip').innerHTML =
-                `<strong class="text-servify-navy">${kpis.tecnicos_vip} de ${kpis.total_tecnicos}</strong> técnicos cuentan con suscripción activa (meta: 70%).`;
-
-            document.getElementById('alertTagCalidad').textContent = `${Number(kpis.promedio_rating).toFixed(1)} ★`;
-            document.getElementById('alertDescCalidad').innerHTML = kpis.resenas_bajas > 0
-                ? `<strong class="text-red-600">${kpis.resenas_bajas} reseña(s) con ≤ 2 estrellas</strong> requieren auditoría en la sección inferior.`
-                : `Calificación promedio de <strong class="text-servify-navy">${Number(kpis.promedio_rating).toFixed(1)} ★</strong> sin reportes críticos pendientes.`;
-
-            // Filtrado tabla de técnicos
-            const filtered = tecnicos.filter(t => {
-                const matchCat = currentFilters.category === 'ALL' || t.categoria === currentFilters.category;
-                const matchPlan = currentFilters.plan === 'ALL' ||
+            // Filtrar técnicos por categoría y plan
+            const techsByCatAndPlan = tecnicos.filter(t => {
+                const matchCat = !isCatFiltered || (t.categoria || '').toLowerCase() === currentFilters.category.toLowerCase();
+                const matchPlan = !isPlanFiltered ||
                     (currentFilters.plan === 'VIP' && t.es_vip) ||
                     (currentFilters.plan === 'Estándar' && !t.es_vip);
-                const matchSearch = t.nombre.toLowerCase().includes(currentFilters.search.toLowerCase()) ||
-                    t.categoria.toLowerCase().includes(currentFilters.search.toLowerCase());
-                return matchCat && matchPlan && matchSearch;
+                return matchCat && matchPlan;
             });
 
+            // También técnicos solo de esa categoría (para calcular % VIP en la categoría)
+            const techsInCatOnly = tecnicos.filter(t =>
+                !isCatFiltered || (t.categoria || '').toLowerCase() === currentFilters.category.toLowerCase()
+            );
+
+            const vipCount = techsByCatAndPlan.filter(t => t.es_vip).length;
+            const totalTechScope = techsInCatOnly.length;
+
+            // Calcular ingresos del segmento seleccionado
+            const revVipScope = techsByCatAndPlan.filter(t => t.es_vip).reduce((acc, t) => acc + Number(t.monto || 0), 0);
+            const revStdScope = techsByCatAndPlan.filter(t => !t.es_vip).reduce((acc, t) => acc + Number(t.monto || 0), 0);
+
+            const displayRev = hasAnyFilter ? (revVipScope + revStdScope) : Number(kpis.ingresos_totales);
+            const displayRevVip = hasAnyFilter ? revVipScope : Number(kpis.ingresos_vip);
+            const displayRevStd = hasAnyFilter ? revStdScope : Number(kpis.ingresos_estandar);
+
+            // Solicitudes del segmento seleccionado
+            let solTotal = kpis.total_solicitudes;
+            let solPend = kpis.solicitudes_pendientes;
+            let solProc = kpis.solicitudes_en_proceso;
+            let solComp = kpis.solicitudes_completadas;
+
+            if (isCatFiltered) {
+                const catSol = solicitudes_por_categoria.find(
+                    s => (s.categoria || '').toLowerCase() === currentFilters.category.toLowerCase()
+                );
+                solTotal = catSol ? catSol.total : 0;
+                solPend = catSol ? catSol.pendientes : 0;
+                solProc = catSol ? catSol.en_proceso : 0;
+                solComp = catSol ? catSol.completadas : 0;
+            }
+
+            // 1. Actualizar Tarjeta Ingresos
+            document.getElementById('kpiIngresosTitle').textContent = isCatFiltered
+                ? `Ingresos (${currentFilters.category})`
+                : 'Dinero Recaudado';
+            document.getElementById('kpiIngresosBadge').textContent = hasAnyFilter ? 'filtrado' : 'real';
+            document.getElementById('kpiIngresos').textContent = `$${displayRev.toFixed(2)}`;
+            document.getElementById('kpiIngresosSub').innerHTML =
+                `VIP: <strong class="text-servify-navy">$${displayRevVip.toFixed(2)}</strong> · Estándar: <strong class="text-servify-navy">$${displayRevStd.toFixed(2)}</strong>`;
+
+            // 2. Actualizar Tarjeta Técnicos VIP
+            document.getElementById('kpiTecnicosVip').textContent = vipCount;
+            document.getElementById('kpiTotalTecnicos').textContent = `de ${totalTechScope} técnicos`;
+            document.getElementById('kpiVipSub').textContent = isCatFiltered
+                ? `Especialistas activos en ${currentFilters.category}`
+                : 'Con membresía activa en la plataforma';
+
+            // 3. Actualizar Tarjeta Trabajos Solicitados
+            document.getElementById('kpiSolicitudes').textContent = solTotal;
+            document.getElementById('kpiSolicitudesSub').innerHTML =
+                `<strong class="text-amber-600">${solPend} pendientes</strong> · <strong class="text-blue-600">${solProc} activas</strong> · <strong class="text-emerald-600">${solComp} listas</strong>`;
+
+            // 4. Actualizar Tarjeta Usuarios / Técnicos del filtro
+            if (hasAnyFilter) {
+                document.getElementById('kpiUsuariosTitle').textContent = 'Técnicos en Filtro';
+                document.getElementById('kpiUsuariosTotales').textContent = techsByCatAndPlan.length;
+                document.getElementById('kpiUsuariosUnit').textContent = 'especialistas';
+                const activosCount = techsByCatAndPlan.filter(t => t.estado === 'En proceso').length;
+                const dispCount = techsByCatAndPlan.length - activosCount;
+                document.getElementById('kpiUsuariosSub').innerHTML =
+                    `<strong class="text-emerald-600">${dispCount} disponibles</strong> · <strong class="text-blue-600">${activosCount} en servicio</strong>`;
+            } else {
+                document.getElementById('kpiUsuariosTitle').textContent = 'Usuarios en la App';
+                document.getElementById('kpiUsuariosTotales').textContent = kpis.total_usuarios;
+                document.getElementById('kpiUsuariosUnit').textContent = 'registrados';
+                document.getElementById('kpiUsuariosSub').innerHTML =
+                    `<strong class="text-servify-navy">${kpis.total_tecnicos}</strong> técnicos · <strong class="text-servify-navy">${kpis.total_clientes}</strong> clientes · <strong class="text-servify-navy">${kpis.total_admins}</strong> admin`;
+            }
+
+            // 5. Actualizar Tarjeta Aporte / Recuperación de Inversión
+            const roiPct = (displayRev / BREAK_EVEN_TARGET) * 100;
+            document.getElementById('kpiRoiTitle').textContent = hasAnyFilter ? 'Aporte a Inversión' : 'Recuperar Inversión';
+            document.getElementById('kpiRoiPct').textContent = `${roiPct.toFixed(2)}%`;
+            document.getElementById('kpiRoiAcumulado').textContent = `($${displayRev.toFixed(2)})`;
+            document.getElementById('kpiRoiBar').style.width = `${Math.min(100, Math.max(6, roiPct))}%`;
+            document.getElementById('kpiRoiSub').textContent = hasAnyFilter
+                ? `Contribución del segmento seleccionado a la meta`
+                : 'Avance real hacia punto de equilibrio';
+
+            // Semáforos dinámicos
+            const pendingRatio = solTotal > 0 ? Math.round((solPend / solTotal) * 100) : 0;
+            document.getElementById('alertTagPendientes').textContent = `${pendingRatio}% SIN ASIGNAR`;
+            document.getElementById('alertDescPendientes').innerHTML =
+                `Hay <strong class="text-servify-navy">${solPend} solicitudes pendientes de ${solTotal}</strong>${isCatFiltered ? ` en ${currentFilters.category}` : ' en total'}.`;
+
+            const vipShare = totalTechScope > 0 ? Math.round((vipCount / totalTechScope) * 100) : 0;
+            document.getElementById('alertTagVip').textContent = `${vipShare}% VIP`;
+            document.getElementById('alertDescVip').innerHTML =
+                `<strong class="text-servify-navy">${vipCount} de ${totalTechScope}</strong> técnicos${isCatFiltered ? ` de ${currentFilters.category}` : ''} tienen suscripción VIP (meta: 70%).`;
+
+            const resenasScope = resenas_recientes.filter(r =>
+                !isCatFiltered || (r.categoria || '').toLowerCase() === currentFilters.category.toLowerCase()
+            );
+            const bajasScope = resenasScope.filter(r => r.calificacion <= 2).length;
+            const avgRatingScope = resenasScope.length
+                ? (resenasScope.reduce((acc, r) => acc + r.calificacion, 0) / resenasScope.length)
+                : Number(kpis.promedio_rating);
+
+            document.getElementById('alertTagCalidad').textContent = `${avgRatingScope.toFixed(1)} ★`;
+            document.getElementById('alertDescCalidad').innerHTML = bajasScope > 0
+                ? `<strong class="text-red-600">${bajasScope} reseña(s) con ≤ 2 estrellas</strong>${isCatFiltered ? ` en ${currentFilters.category}` : ''} requieren auditoría.`
+                : `Calificación promedio de <strong class="text-servify-navy">${avgRatingScope.toFixed(1)} ★</strong> sin reportes críticos pendientes.`;
+
+            // Actualizar gráficos y reseñas con los filtros activos
+            renderChartsFiltered(biPayload, techsByCatAndPlan, displayRevVip, displayRevStd);
+            renderReviews(resenas_recientes);
+
+            // Tabla final (aplica también el buscador de texto)
+            const filteredTable = techsByCatAndPlan.filter(t =>
+                t.nombre.toLowerCase().includes(currentFilters.search.toLowerCase()) ||
+                t.categoria.toLowerCase().includes(currentFilters.search.toLowerCase())
+            );
+
+            document.getElementById('techTableTitle').textContent = isCatFiltered
+                ? `Técnicos de ${currentFilters.category} (${filteredTable.length})`
+                : `Lista de Técnicos y su Plan Actual (${filteredTable.length})`;
+
             const tbody = document.getElementById('techniciansTableBody');
-            if (!filtered.length) {
-                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-xs text-servify-muted">No hay técnicos que coincidan con el filtro.</td></tr>`;
+            if (!filteredTable.length) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-xs text-servify-muted">No hay técnicos que coincidan con el filtro seleccionado.</td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = filtered.map(tech => {
+            tbody.innerHTML = filteredTable.map(tech => {
                 const planBadge = tech.es_vip
                     ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">★ ${escapeHtml(tech.plan)}</span>`
                     : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">Estándar</span>`;
@@ -941,6 +1114,21 @@
                 });
             });
 
+            document.getElementById('btnClearFilters').addEventListener('click', () => {
+                currentFilters = { category: 'ALL', plan: 'ALL', search: '' };
+                document.getElementById('filterCategory').value = 'ALL';
+                document.getElementById('searchTechnician').value = '';
+                document.querySelectorAll('.plan-btn').forEach(b => {
+                    const isAll = b.dataset.plan === 'ALL';
+                    b.classList.toggle('bg-servify-teal', isAll);
+                    b.classList.toggle('text-servify-navy', isAll);
+                    b.classList.toggle('font-bold', isAll);
+                    b.classList.toggle('text-slate-300', !isAll);
+                    b.classList.toggle('font-semibold', !isAll);
+                });
+                updateDashboardUI();
+            });
+
             document.getElementById('btnCloseAudit').addEventListener('click', () => document.getElementById('auditModal').classList.add('hidden'));
             document.getElementById('btnCancelAudit').addEventListener('click', () => document.getElementById('auditModal').classList.add('hidden'));
             document.getElementById('btnConfirmAudit').addEventListener('click', confirmAuditService);
@@ -965,4 +1153,4 @@
         });
     </script>
 </body>
-</html>
+</html>     
